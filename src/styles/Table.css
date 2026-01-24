@@ -1,0 +1,39 @@
+.table-container {
+  overflow-x: auto;
+  width: 100%;
+  background: white;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th {
+  text-align: left;
+  background-color: #f8fafc;
+  padding: 12px;
+  color: #475569 !important;
+  border-bottom: 2px solid #e2e8f0;
+}
+
+td {
+  padding: 10px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.table-container input {
+  width: 100%;
+  border: 1px solid transparent;
+  background: transparent;
+  color: #1e293b !important;
+}
+
+.table-container input:focus {
+  border-bottom: 1px solid #2ca01c;
+  outline: none;
+}
+
+.btn-delete svg {
+  color: #ef4444 !important; /* Icono papelera rojo */
+}
