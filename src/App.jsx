@@ -1,182 +1,174 @@
-import React, { useState, useEffect } from 'react'; // CORREGIDO: Asegúrate de que useEffect esté aquí
+import { useEffect, useState } from 'react';
 import { supabase } from './lib/supabase';
-import Papa from 'papaparse';
+import Login from './components/Login';
 import Header from './components/Header';
-import ManualForm from './components/ManualForm';
 import ReviewTable from './components/ReviewTable';
-import InvoiceExtractor from './components/InvoiceExtractor';
+import BulkScraper from './components/BulkScraper';
+import ManualForm from './components/ManualForm';
 import SettingsManager from './components/SettingsManager';
-import { FileSpreadsheet, Inbox, Trash2, Cloud, DownloadCloud } from 'lucide-react';
-
-import './styles/App.css';
-import './styles/Components.css';
-import './styles/Table.css';
+import InvoiceExtractor from './components/InvoiceExtractor';
 
 function App() {
-  const [productosEnRevision, setProductosEnRevision] = useState([]);
-  const [politicas, setPoliticas] = useState([]); 
-  const [sincronizado, setSincronizado] = useState(false);
+  const [session, setSession] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [productos, setProductos] = useState([]); 
+  const [politicas, setPoliticas] = useState([]);
 
-  // 1. Cargar políticas globalmente
-  const fetchPoliticas = async () => {
-    try {
-      const { data, error } = await supabase.from('politicas_comerciales').select('*');
-      if (error) throw error;
-      if (data) setPoliticas(data);
-    } catch (error) {
-      console.error("Error al obtener políticas:", error.message);
-    }
-  };
-
-  // 2. Efecto inicial para cargar políticas al abrir la app
+  // 1. Gestión de Sesión
   useEffect(() => {
-    fetchPoliticas();
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setLoading(false);
+    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+    });
+    return () => subscription.unsubscribe();
   }, []);
 
-  // 3. Cargar datos de productos desde Supabase (Bandeja de entrada)
-  const cargarDesdeDB = async () => {
-    const { data, error } = await supabase.from('productos').select('*');
+  // 2. Cargar políticas al iniciar
+  useEffect(() => {
+    if (session) {
+      cargarPoliticas();
+    }
+  }, [session]);
 
-    if (error) return alert("Error al cargar: " + error.message);
-    
-    const existentesIds = productosEnRevision.map(p => p.id);
-    const nuevos = data.filter(p => !existentesIds.includes(p.id));
-    
-    setProductosEnRevision(prev => [...prev, ...nuevos]);
-    alert(`${nuevos.length} productos cargados desde la base de datos.`);
+  const cargarPoliticas = async () => {
+    const { data } = await supabase.from('politicas_comerciales').select('*');
+    if (data) setPoliticas(data);
   };
 
-  // 4. Actualizar campos en la bandeja
-  const actualizarCampo = (id, campo, valor) => {
-    setSincronizado(false);
-    setProductosEnRevision(prev => 
-      prev.map(p => (p.id === id || p.id_temporal === id) ? { ...p, [campo]: valor } : p)
-    );
-  };
+  // 3. Cargar desde BD (Evitando duplicar lo que ya está en pantalla)
+  const cargarDesdeBD = async () => {
+    try {
+      const { data, error } = await supabase.from('productos').select('*');
+      if (error) throw error;
 
-  // 5. Eliminar de la bandeja
-  const eliminarProducto = (id) => {
-    setProductosEnRevision(prev => prev.filter(p => p.id !== id && p.id_temporal !== id));
-  };
-
-  // 6. Sincronizar con Supabase (Upsert)
-  const subirASupabase = async () => {
-    if (productosEnRevision.length === 0) return;
-    
-    const datosFinales = productosEnRevision.map(({ id_temporal, ...resto }) => ({
-      ...resto,
-      tipo_articulo: 'Está en el inventario',
-      cuenta_ingresos: 'Ingresos de ventas de productos',
-      cuenta_gastos: 'Costo de las ventas',
-      cuenta_activo: 'Activo de inventario'
-    }));
-
-    const { error } = await supabase.from('productos').upsert(datosFinales, { onConflict: 'id' });
-    
-    if (error) {
-      alert("Error: " + error.message);
-    } else {
-      setSincronizado(true);
-      alert("¡Sincronizado con Supabase correctamente!");
+      if (data) {
+        const deBaseDatos = data.map(p => ({ 
+          ...p, 
+          solo_local: false, 
+          id_temporal: p.id 
+        }));
+        
+        setProductos(prev => {
+          const skusEnPantalla = new Set(prev.map(p => p.sku?.toString().trim()));
+          const nuevosNoRepetidos = deBaseDatos.filter(p => p.sku && !skusEnPantalla.has(p.sku.toString().trim()));
+          return [...prev, ...nuevosNoRepetidos];
+        });
+      }
+    } catch (err) {
+      alert("Error al cargar: " + err.message);
     }
   };
 
-  // 7. Exportar CSV para QuickBooks Online
-  const exportarACSV = () => {
-    if (productosEnRevision.length === 0) return alert("Bandeja vacía");
+  // 4. Agregar productos (Scraper, Manual, Factura)
+  const handleAddBatch = (nuevos) => {
+    if (!Array.isArray(nuevos)) return;
+    setProductos(prev => {
+      const skusEnPantalla = new Set(prev.map(p => p.sku?.toString().trim()));
+      const filtrados = nuevos
+        .filter(n => n.sku && !skusEnPantalla.has(n.sku.toString().trim()))
+        .map(n => ({
+          ...n,
+          solo_local: true,
+          id_temporal: n.id_temporal || crypto.randomUUID()
+        }));
 
-    const hoy = new Date();
-    const fechaQBO = `${String(hoy.getMonth() + 1).padStart(2, '0')}/${String(hoy.getDate()).padStart(2, '0')}/${hoy.getFullYear()}`;
-
-    const mapeoQBO = productosEnRevision.map(p => ({
-      "Nombre del producto/servicio": p.nombre || '',
-      "Categoría": p.categoria || '',
-      "Tipo de artículo": "Está en el inventario",
-      "Unidad de mantenimiento de existencias": p.sku || '',
-      "Descripción de las ventas": p.nombre || '',
-      "Precio/tarifa de venta": p.precio_venta || 0,
-      "Cuenta de ingresos": "Ingresos de ventas de productos",
-      "Descripción de las compras": p.nombre || '',
-      "Costo de compra": p.costo_compra || 0,
-      "Cuenta de gastos": "Costo de las ventas",
-      "Cantidad en existencia": p.cantidad_existencia || 0,
-      "Cantidad en la fecha": fechaQBO,
-      "Punto de reabastecimiento": 0,
-      "Cuenta de activos de inventario": "Activo de inventario"
-    }));
-
-    const csv = Papa.unparse(mapeoQBO, { delimiter: ";", header: true });
-    const blob = new Blob(["\uFEFF" + csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `Importar_QBO_${hoy.getTime()}.csv`;
-    link.click();
+      if (filtrados.length === 0 && nuevos.length > 0) {
+        alert("Los productos ya están en la lista de revisión.");
+        return prev;
+      }
+      return [...filtrados, ...prev];
+    });
   };
 
+  const handleUpdate = (id, campo, valor) => {
+    setProductos(prev => prev.map(p => 
+      p.id_temporal === id ? { ...p, [campo]: valor } : p
+    ));
+  };
+
+  const handleDelete = (id) => {
+    setProductos(prev => prev.filter(p => p.id_temporal !== id));
+  };
+
+  const vaciarBandejaCompleta = () => {
+    if (window.confirm("¿Vaciar toda la tabla de revisión?")) setProductos([]);
+  };
+
+  // 5. SINCRONIZACIÓN INTELIGENTE (UPSERT)
+const handleSincronizar = async () => {
+  if (productos.length === 0) return alert("No hay productos para sincronizar.");
+
+  try {
+    const datosFinales = productos.map(p => {
+      // IMPORTANTE: Si el producto viene de la BD tiene un ID real (UUID)
+      // Si es nuevo, NO debemos enviarle un ID para que Supabase lo genere
+      const obj = {
+        nombre: p.nombre,
+        sku: p.sku ? p.sku.toString().trim() : null,
+        precio_venta: parseFloat(p.precio_venta) || 0,
+        costo_compra: parseFloat(p.costo_compra) || 0,
+        cantidad_existencia: parseInt(p.cantidad_existencia) || 0,
+        proveedor: p.proveedor || '',
+        categoria: p.categoria || ''
+      };
+
+      // Solo incluimos el ID si NO es un producto "solo local" (es decir, ya existe en BD)
+      if (!p.solo_local && p.id) {
+        obj.id = p.id;
+      }
+
+      return obj;
+    }).filter(p => p.sku !== null);
+
+    const { error } = await supabase
+      .from('productos')
+      .upsert(datosFinales, { onConflict: 'sku' });
+
+    if (error) throw error;
+
+    alert("¡Sincronización Exitosa!");
+    setProductos([]);
+    await cargarDesdeBD();
+
+  } catch (error) {
+    console.error("Detalle técnico:", error);
+    alert("Error de Permisos/RLS: " + error.message);
+  }
+};
+
+  if (loading) return <div className="loading-state">Cargando...</div>;
+  if (!session) return <Login />;
+
   return (
-    <div className="container">
-      <Header onUpload={subirASupabase} />
-      
-      <div className="layout-grid">
-        <ManualForm 
-          politicas={politicas} 
-          onAdd={(prod) => {
-            setProductosEnRevision([...productosEnRevision, prod]);
-            setSincronizado(false);
-          }} 
-        />
-        
-        <div className="card central-panel">
-          <div className="tab-container">
-            <div className="tab-info">
-              <Inbox size={18} />
-              <h3>Bandeja de Revisión ({productosEnRevision.length})</h3>
-            </div>
-            <div className="tab-actions">
-              <button className="btn-load-db" onClick={cargarDesdeDB}>
-                <DownloadCloud size={16} /> Cargar de DB
-              </button>
-              <button className="btn-export-csv" onClick={exportarACSV}>
-                <FileSpreadsheet size={16} /> Exportar CSV
-              </button>
-            </div>
-          </div>
-
+    <div className="app-container">
+      <Header onUpload={handleSincronizar} />
+      <main className="dashboard-grid">
+        <div style={{ gridColumn: 'span 1' }}>
+          <ManualForm politicas={politicas} onAdd={(p) => handleAddBatch([p])} />
+        </div>
+        <div style={{ gridColumn: 'span 4' }}>
           <ReviewTable 
-            productos={productosEnRevision} 
-            onUpdate={actualizarCampo} 
-            onDelete={eliminarProducto} 
+            productos={productos} 
+            onUpdate={handleUpdate} 
+            onDelete={handleDelete}
+            onLoadBD={cargarDesdeBD}
+            onClearAll={vaciarBandejaCompleta}
+            onAddBatch={handleAddBatch}
           />
-
-          {productosEnRevision.length > 0 && (
-            <div className="panel-footer">
-              <div className={`status-indicator ${sincronizado ? 'synced' : 'pending'}`}>
-                <Cloud size={16} /> {sincronizado ? 'Sincronizado' : 'Cambios Pendientes'}
-              </div>
-              <button className="btn-clear-all" onClick={() => setProductosEnRevision([])}>
-                <Trash2 size={16} /> Vaciar Mesa
-              </button>
-            </div>
-          )}
         </div>
-        
-        <InvoiceExtractor onExtract={(prods) => {
-          setProductosEnRevision([...productosEnRevision, ...prods]);
-          setSincronizado(false);
-        }} />
-      </div>
-
-      <div className="bottom-section">
-        <div className="placeholder-card">
-          <div className="placeholder-content">
-            <p>Módulo Secundario</p>
-            <span>Espacio reservado para script futuro</span>
-          </div>
+        <div style={{ gridColumn: 'span 1' }}>
+          <InvoiceExtractor onExtract={handleAddBatch} />
         </div>
-
-        <SettingsManager politicas={politicas} onRefresh={fetchPoliticas} />
-      </div>
+        <div className="grid-col-3">
+          <BulkScraper politicas={politicas} onDataReady={handleAddBatch} />
+        </div>
+        <div className="grid-col-3">
+          <SettingsManager politicas={politicas} onRefresh={cargarPoliticas} />
+        </div>
+      </main>
     </div>
   );
 }

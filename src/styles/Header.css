@@ -1,0 +1,37 @@
+/* Header.css */
+.main-header {
+  background-color: #1e293b; /* Fondo azul oscuro profundo */
+  color: white;
+  padding: 12px 24px;
+  display: flex;
+  justify-content: space-between; /* Logo a la izquierda, Botón a la derecha */
+  align-items: center;
+  border-bottom: 1px solid #334155;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.logo-section {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.logo-section h1 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  margin: 0;
+}
+
+.logo-section svg {
+  color: #10b981; /* Icono de base de datos en verde esmeralda */
+}
+
+/* El botón ya usa la clase global .btn .btn-success que definimos en index.css */
+.main-header .btn-success {
+  padding: 8px 18px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  border-radius: 6px;
+  /* El color verde ya viene del sistema global */
+}

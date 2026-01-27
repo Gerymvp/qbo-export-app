@@ -1,0 +1,54 @@
+/* Modificación de la tarjeta base */
+.review-card {
+  max-width: 100%;
+  height: 500px; /* Define una altura fija para la tarjeta */
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* El encabezado de la tarjeta (Título y botones) */
+.review-header {
+  flex-shrink: 0; /* Evita que el header se aplaste */
+  padding-bottom: 15px;
+}
+
+/* Contenedor del scroll: ahora maneja X e Y */
+.table-scroll-container {
+  width: 100%;
+  flex-grow: 1; /* Ocupa todo el espacio disponible entre header y footer */
+  overflow: auto; /* Habilita scroll en ambos ejes */
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+}
+
+/* Hacer que el encabezado de la tabla sea pegajoso (Sticky) */
+.review-table thead th {
+  position: sticky;
+  top: 0;
+  background-color: #f8fafc; /* Color de fondo para que no se vea transparente al hacer scroll */
+  z-index: 10;
+  box-shadow: inset 0 -1px 0 #e2e8f0; /* Línea divisoria visual */
+}
+
+/* El pie de página de la tarjeta */
+.review-footer {
+  flex-shrink: 0; /* Evita que el footer se aplaste */
+  padding-top: 15px;
+  background: white;
+}
+
+/* Mantener el ancho mínimo para el scroll horizontal */
+.review-table {
+  width: 100%;
+  min-width: 700px; 
+  table-layout: fixed;
+}
+
+.input-ghost{
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    margin-top: 4px;
+}

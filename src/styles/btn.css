@@ -1,0 +1,67 @@
+/* --- Sistema Global de Botones --- */
+
+/* Clase base para todos los botones */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-weight: 500;
+  font-size: 0.875rem;
+  padding: 8px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+
+/* Botón Primario (Azul) - Úsalo para "BD" o "Agregar" */
+.btn-primary {
+  background-color: transparent;
+  color: #64748b;
+  border-color: #e2e8f0;
+}
+.btn-primary:hover {
+  background-color: #2563eb;
+  box-shadow: 0 4px 6px -1px rgba(59, 130, 246, 0.2);
+  color: white;
+}
+
+/* Botón Success (Verde) - Úsalo para "Excel" */
+.btn-success {
+  background-color: transparent;
+  color: #64748b;
+  border-color: #e2e8f0;
+}
+.btn-success:hover {
+  background-color: #059669;
+  box-shadow: 0 4px 6px -1px rgba(16, 185, 129, 0.2);
+  color: white;
+}
+
+/* Botón Danger/Ghost (Rojo) - Úsalo para "Vaciar" o "Borrar" */
+.btn-danger {
+  background-color: transparent;
+  color: #64748b;
+  border-color: #e2e8f0;
+}
+.btn-danger:hover {
+  background-color: #fee2e2;
+  color: #ef4444;
+  border-color: #fecaca;
+}
+
+/* Efecto de presión para todos */
+.btn:active {
+  transform: scale(0.96);
+}
+
+.input{
+    display: block;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #64748b;
+    margin-bottom: 4px;
+    text-transform: uppercase;
+}

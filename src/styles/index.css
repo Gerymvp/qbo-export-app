@@ -1,18 +1,85 @@
-/* Limpieza total de estilos por defecto de Vite */
-:root {
-  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
-  line-height: 1.5;
-  font-weight: 400;
-  background-color: #f1f5f9;
+/* Reset Base */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Inter', sans-serif; background-color: #f1f5f9; color: #1e293b; }
+
+.app-container { min-height: 100vh; }
+
+/* Grid de 6 columnas para permitir divisiones de 3 y 2 */
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 20px;
+  padding: 20px;
+  max-width: 1600px;
+  margin: 0 auto;
 }
 
-body {
-  margin: 0;
-  display: block; /* Cambiado de place-items: center */
-  min-width: 100%;
-  min-height: 100vh;
+/* Clases de utilidad para el Grid */
+.grid-col-2 { grid-column: span 2; } /* 6 / 2 = 3 columnas arriba */
+.grid-col-3 { grid-column: span 3; } /* 6 / 3 = 2 columnas abajo */
+
+/* Tarjeta Base Universal (Para que todos los componentes se vean iguales) */
+.manual-card, .review-card, .card, .scraper-card, .settings-card {
+  background: white;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  padding: 20px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
-#root {
+/* Responsivo para tablets/móvil */
+@media (max-width: 1100px) {
+  .dashboard-grid { grid-template-columns: 1fr; }
+  .grid-col-2, .grid-col-3 { grid-column: span 1; }
+}
+
+.dashboard-grid > div {
+  min-width: 0; 
+}
+
+/* --- Sistema Global de Formularios (index.css) --- */
+
+.form-group {
+  margin-bottom: 12px;
+}
+
+.form-label {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #64748b;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+}
+
+/* Aplica a inputs y textareas para consistencia */
+.input-standard, 
+.textarea-standard {
   width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-family: 'Inter', sans-serif;
+  font-size: 0.9rem;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  background-color: white;
 }
+
+.textarea-standard {
+  font-family: 'Fira Code', monospace; /* Mantenemos el estilo de código para el scraper */
+  resize: vertical;
+  min-height: 100px;
+}
+
+/* Efecto de foco para todos los inputs de la app */
+.input-standard:focus, 
+.textarea-standard:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+

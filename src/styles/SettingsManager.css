@@ -1,0 +1,19 @@
+.settings-card {
+  background: white;
+  padding: 20px;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+}
+
+.table-mini {
+  margin-top: 15px;
+  font-size: 0.85rem;
+}
+
+.badge.active {
+  background: #dcfce7;
+  color: #166534;
+  padding: 2px 8px;
+  border-radius: 99px;
+  font-weight: 500;
+}
