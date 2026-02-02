@@ -1,5 +1,8 @@
 import { useEffect, useState } from 'react';
 import { supabase } from './lib/supabase';
+
+// Componentes de la interfaz
+import Sidebar from './components/Sidebar';
 import Login from './components/Login';
 import Header from './components/Header';
 import ReviewTable from './components/ReviewTable';
@@ -13,6 +16,9 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [productos, setProductos] = useState([]); 
   const [politicas, setPoliticas] = useState([]);
+  
+  const [isCollapsed, setIsCollapsed] = useState(true);
+  const [currentView, setCurrentView] = useState('dashboard'); 
 
   // 1. Gestión de Sesión
   useEffect(() => {
@@ -26,7 +32,7 @@ function App() {
     return () => subscription.unsubscribe();
   }, []);
 
-  // 2. Cargar políticas al iniciar
+  // 2. Cargar políticas
   useEffect(() => {
     if (session) {
       cargarPoliticas();
@@ -38,23 +44,44 @@ function App() {
     if (data) setPoliticas(data);
   };
 
-  // 3. Cargar desde BD (Evitando duplicar lo que ya está en pantalla)
+  // 3. Funciones de Gestión de Productos
+  const handleAddBatch = (nuevos) => {
+    const procesados = nuevos.map(n => ({
+      ...n,
+      id_temporal: n.id || `${Date.now()}-${Math.random()}`,
+      solo_local: n.solo_local !== undefined ? n.solo_local : true
+    }));
+    setProductos(prev => [...prev, ...procesados]);
+  };
+
+  const handleUpdate = (id, field, value) => {
+    setProductos(prev => prev.map(p => 
+      (p.id_temporal === id || p.id === id) ? { ...p, [field]: value } : p
+    ));
+  };
+
+  const handleDelete = (id) => {
+    setProductos(prev => prev.filter(p => p.id_temporal !== id && p.id !== id));
+  };
+
+  const vaciarBandejaCompleta = () => {
+    if (window.confirm("¿Vaciar toda la lista actual?")) setProductos([]);
+  };
+
   const cargarDesdeBD = async () => {
     try {
-      const { data, error } = await supabase.from('productos').select('*');
+      const { data, error } = await supabase.from('productos').select('*').limit(1000);
       if (error) throw error;
-
       if (data) {
-        const deBaseDatos = data.map(p => ({ 
+        const listos = data.map(p => ({ 
           ...p, 
-          solo_local: false, 
-          id_temporal: p.id 
+          id_temporal: p.id, 
+          solo_local: false 
         }));
-        
         setProductos(prev => {
-          const skusEnPantalla = new Set(prev.map(p => p.sku?.toString().trim()));
-          const nuevosNoRepetidos = deBaseDatos.filter(p => p.sku && !skusEnPantalla.has(p.sku.toString().trim()));
-          return [...prev, ...nuevosNoRepetidos];
+          const actualesIds = new Set(prev.map(prod => prod.id).filter(Boolean));
+          const filtrados = listos.filter(d => !actualesIds.has(d.id));
+          return [...prev, ...filtrados];
         });
       }
     } catch (err) {
@@ -62,113 +89,106 @@ function App() {
     }
   };
 
-  // 4. Agregar productos (Scraper, Manual, Factura)
-  const handleAddBatch = (nuevos) => {
-    if (!Array.isArray(nuevos)) return;
-    setProductos(prev => {
-      const skusEnPantalla = new Set(prev.map(p => p.sku?.toString().trim()));
-      const filtrados = nuevos
-        .filter(n => n.sku && !skusEnPantalla.has(n.sku.toString().trim()))
-        .map(n => ({
-          ...n,
-          solo_local: true,
-          id_temporal: n.id_temporal || crypto.randomUUID()
-        }));
+  const handleSincronizar = async () => {
+    if (productos.length === 0) return alert("No hay datos para sincronizar.");
 
-      if (filtrados.length === 0 && nuevos.length > 0) {
-        alert("Los productos ya están en la lista de revisión.");
-        return prev;
-      }
-      return [...filtrados, ...prev];
-    });
+    // VALIDACIÓN DE DUPLICADOS
+    const skus = productos.map(p => p.sku?.toString().trim().toLowerCase());
+    const tieneDuplicados = skus.some((sku, index) => skus.indexOf(sku) !== index);
+
+    if (tieneDuplicados) {
+      return alert("❌ Error: Tienes SKUs duplicados. Corrígelos antes de sincronizar.");
+    }
+
+    try {
+      // CORRECCIÓN PARA EL ERROR DE "ID NULL"
+      const datosFinales = productos.map(p => {
+        // Creamos un objeto con los datos básicos
+        const item = {
+          sku: p.sku,
+          nombre: p.nombre,
+          precio_venta: parseFloat(p.precio_venta) || 0,
+          costo_compra: parseFloat(p.costo_compra) || 0,
+          cantidad_existencia: parseInt(p.cantidad_existencia) || 0,
+          categoria: p.categoria || '',
+          punto_reorden: p.punto_reorden || 0,
+          fecha_inventario: p.fecha_inventario || new Date().toISOString()
+        };
+
+        // Si el producto YA EXISTÍA en la base de datos (no es solo_local),
+        // le pasamos su ID original para que haga UPDATE.
+        // Si es NUEVO, no enviamos la propiedad 'id' para que la DB genere uno.
+        if (!p.solo_local && p.id) {
+          item.id = p.id;
+        }
+
+        return item;
+      });
+
+      const { error } = await supabase
+        .from('productos')
+        .upsert(datosFinales, { onConflict: 'sku' });
+
+      if (error) throw error;
+
+      alert("¡Sincronización Exitosa!");
+      setProductos([]); 
+      await cargarDesdeBD(); 
+    } catch (error) {
+      console.error("Error en upsert:", error);
+      alert("Error de Base de Datos: " + (error.message || "Error al sincronizar"));
+    }
   };
-
-  const handleUpdate = (id, campo, valor) => {
-    setProductos(prev => prev.map(p => 
-      p.id_temporal === id ? { ...p, [campo]: valor } : p
-    ));
-  };
-
-  const handleDelete = (id) => {
-    setProductos(prev => prev.filter(p => p.id_temporal !== id));
-  };
-
-  const vaciarBandejaCompleta = () => {
-    if (window.confirm("¿Vaciar toda la tabla de revisión?")) setProductos([]);
-  };
-
-  // 5. SINCRONIZACIÓN INTELIGENTE (UPSERT)
-const handleSincronizar = async () => {
-  if (productos.length === 0) return alert("No hay productos para sincronizar.");
-
-  try {
-    const datosFinales = productos.map(p => {
-      // IMPORTANTE: Si el producto viene de la BD tiene un ID real (UUID)
-      // Si es nuevo, NO debemos enviarle un ID para que Supabase lo genere
-      const obj = {
-        nombre: p.nombre,
-        sku: p.sku ? p.sku.toString().trim() : null,
-        precio_venta: parseFloat(p.precio_venta) || 0,
-        costo_compra: parseFloat(p.costo_compra) || 0,
-        cantidad_existencia: parseInt(p.cantidad_existencia) || 0,
-        proveedor: p.proveedor || '',
-        categoria: p.categoria || ''
-      };
-
-      // Solo incluimos el ID si NO es un producto "solo local" (es decir, ya existe en BD)
-      if (!p.solo_local && p.id) {
-        obj.id = p.id;
-      }
-
-      return obj;
-    }).filter(p => p.sku !== null);
-
-    const { error } = await supabase
-      .from('productos')
-      .upsert(datosFinales, { onConflict: 'sku' });
-
-    if (error) throw error;
-
-    alert("¡Sincronización Exitosa!");
-    setProductos([]);
-    await cargarDesdeBD();
-
-  } catch (error) {
-    console.error("Detalle técnico:", error);
-    alert("Error de Permisos/RLS: " + error.message);
-  }
-};
 
   if (loading) return <div className="loading-state">Cargando...</div>;
   if (!session) return <Login />;
 
   return (
-    <div className="app-container">
-      <Header onUpload={handleSincronizar} />
-      <main className="dashboard-grid">
-        <div style={{ gridColumn: 'span 1' }}>
-          <ManualForm politicas={politicas} onAdd={(p) => handleAddBatch([p])} />
-        </div>
-        <div style={{ gridColumn: 'span 4' }}>
-          <ReviewTable 
-            productos={productos} 
-            onUpdate={handleUpdate} 
-            onDelete={handleDelete}
-            onLoadBD={cargarDesdeBD}
-            onClearAll={vaciarBandejaCompleta}
-            onAddBatch={handleAddBatch}
-          />
-        </div>
-        <div style={{ gridColumn: 'span 1' }}>
-          <InvoiceExtractor onExtract={handleAddBatch} />
-        </div>
-        <div className="grid-col-3">
-          <BulkScraper politicas={politicas} onDataReady={handleAddBatch} />
-        </div>
-        <div className="grid-col-3">
-          <SettingsManager politicas={politicas} onRefresh={cargarPoliticas} />
-        </div>
-      </main>
+    <div className="main-layout">
+      <Sidebar 
+        isCollapsed={isCollapsed} 
+        setIsCollapsed={setIsCollapsed} 
+        currentView={currentView}
+        setCurrentView={setCurrentView}
+      />
+
+      <div className="content-area">
+        {currentView === 'dashboard' ? (
+          <>
+            <Header onUpload={handleSincronizar} />
+            <main className="dashboard-grid">
+              <div style={{ gridColumn: 'span 1' }}>
+                <ManualForm politicas={politicas} onAdd={(p) => handleAddBatch([p])} />
+              </div>
+              <div style={{ gridColumn: 'span 4' }}>
+                <ReviewTable 
+                  productos={productos} 
+                  onUpdate={handleUpdate} 
+                  onDelete={handleDelete}
+                  onClearAll={vaciarBandejaCompleta}
+                  onAddBatch={handleAddBatch}
+                />
+              </div>
+              <div style={{ gridColumn: 'span 1' }}>
+                <InvoiceExtractor onExtract={handleAddBatch} />
+              </div>
+              <div className="grid-col-3">
+                <BulkScraper politicas={politicas} onDataReady={handleAddBatch} />
+              </div>
+              <div className="grid-col-3">
+                <SettingsManager politicas={politicas} onRefresh={cargarPoliticas} />
+              </div>
+            </main>
+          </>
+        ) : (
+          <div style={{ padding: '40px', textAlign: 'center' }}>
+            <h1 style={{ color: '#1e293b', marginBottom: '10px' }}>
+              {currentView === 'inventario' ? 'Inventario Pro' : 'Facturación'}
+            </h1>
+            <p style={{ color: '#64748b' }}>Esta sección está en desarrollo.</p>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

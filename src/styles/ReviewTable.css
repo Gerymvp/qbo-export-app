@@ -52,3 +52,30 @@
     border-radius: 6px;
     margin-top: 4px;
 }
+
+/* Estilo para la fila duplicada */
+.row-duplicate {
+    background-color: #fff1f2 !important;
+}
+
+/* Estilo para el input específico que causa el error */
+.input-error {
+    border-color: #f87171 !important;
+    color: #b91c1c !important;
+    background-color: #fef2f2 !important;
+}
+
+/* Botón de borrar más sutil para la tabla */
+.btn-danger-soft {
+    background: transparent;
+    color: #ef4444;
+    border: none;
+    padding: 5px;
+    cursor: pointer;
+    border-radius: 4px;
+    transition: background 0.2s;
+}
+
+.btn-danger-soft:hover {
+    background: #fee2e2;
+}

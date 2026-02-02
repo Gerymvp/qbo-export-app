@@ -1,0 +1,91 @@
+CAMBIOS NECESARIOS PARA LLEVAR EL PROYECTO A PRODUCCIÓN
+
+RESUMEN RÁPIDO:
+- Prioridad alta: validar envs, reforzar validaciones de datos, manejo de errores, RLS de Supabase y CI/CD.
+- Prioridad media: tests, auditoría de dependencias, accesibilidad y UX (spinner / deshabilitar botones).
+- Prioridad baja: documentación final, licencia, limpieza de dependencias no usadas.
+
+1) VARIABLES DE ENTORNO (AL INICIO)
+- Archivo: src/lib/supabase.js
+- Cambio: Validar que VITE_SUPABASE_URL y VITE_SUPABASE_ANON_KEY existan y fallar explicitamente si faltan.
+- Ejemplo:
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
+  const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+  if (!supabaseUrl || !supabaseAnonKey) {
+    throw new Error('VITE_SUPABASE_URL y VITE_SUPABASE_ANON_KEY deben estar definidas')
+  }
+
+2) .env.example
+- Archivo nuevo: .env.example (raíz del proyecto o carpeta qbo-export-app)
+- Contenido mínimo:
+  VITE_SUPABASE_URL=https://your-project.supabase.co
+  VITE_SUPABASE_ANON_KEY=public-anon-key
+
+3) MANEJO DE ERRORES Y FEEDBACK
+- Archivos a revisar: src/App.jsx, src/components/SettingsManager.jsx, y cualquier componente que interactúe con Supabase.
+- Cambios: envolver llamadas async en try/catch, mostrar toasts/alerts con mensajes amigables, devolver estados de loading y error.
+- Ejemplo para App.jsx: deshabilitar botón de sincronizar y mostrar spinner mientras se ejecuta; capturar y mostrar mensajes de error detallados.
+
+4) VALIDACIONES DE DATOS (ANTES DE UPLOAD/UPSERT)
+- Validar campos obligatorios: sku (no vacío), nombre, precio (>=0), cantidad (>=0).
+- Reforzar verificación de duplicados: normalizar SKU (trim + toLowerCase) y bloquear si hay duplicados locales o ya en BD.
+- Archivo: src/App.jsx (función handleSincronizar y en formularios ManualForm/InvoiceExtractor/BulkScraper)
+
+5) CORRECCIONES CONCRETAS EN handleSincronizar
+- Añadir estado `isSyncing` o `syncing` en App.jsx
+- Deshabilitar UI durante la operación
+- Filtrar/validar productos antes de armar datosFinales
+- Manejar error del supabase.upsert y mostrar detalle.
+
+6) REGLAS DE SEGURIDAD (SUPABASE)
+- Revisar RLS (Row Level Security) y políticas en Supabase para producción.
+- Asegurar que solo roles permitidos (auth.uid) puedan modificar/leer según sea necesario.
+
+7) CI / LINT / BUILD
+- Añadir GitHub Actions: lint (eslint), build (vite), y opcionalmente tests.
+- Añadir scripts de package.json si faltan:
+  "lint": "eslint 'src/**' --ext .js,.jsx",
+  "build": "vite build",
+  "predeploy": "npm run lint && npm run build"
+
+8) TESTS
+- Añadir pruebas unitarias (Jest/ Vitest) para funciones críticas: validación SKU, handleAddBatch, handleSincronizar (mockear supabase).
+- Añadir E2E básico con Playwright o Cypress para flujo de login + sincronizar.
+
+9) DEPENDENCIAS
+- Revisar package.json y eliminar dependencias no utilizadas (ej.: tesseract.js si no se usa).
+- Ejecutar `npm audit` y corregir vulnerabilidades críticas.
+
+10) ACCESIBILIDAD Y UX
+- Botones: añadir aria-labels, deshabilitar durante operaciones asíncronas, mostrar spinner.
+- Formularios: focus automático en errores, mensajes inline.
+
+11) DOCUMENTACIÓN Y OTRAS TAREAS
+- Añadir/actualizar README con pasos de despliegue y variables env.
+- Añadir LICENSE (si corresponde).
+- Revisar `.gitignore` y asegurarse de que `.env` no esté trackeado.
+- Agregar `.env.example` (ver punto 2).
+
+12) CHECKLIST FINAL (MARCAR AL COMPLETAR)
+- [ ] Validar envs al inicio (supabase.js)
+- [ ] Añadir .env.example
+- [ ] Mejorar manejo de errores + toasts
+- [ ] Validaciones en UI (SKU, precio, cantidad)
+- [ ] Deshabilitar botones y mostrar spinner durante operaciones largas
+- [ ] Revisar y aplicar RLS en Supabase
+- [ ] Añadir CI (GitHub Actions)
+- [ ] Añadir tests unitarios y E2E
+- [ ] Auditar y limpiar dependencias
+- [ ] Ejecutar `npm audit fix` y resolver issues críticos
+- [ ] Actualizar README y añadir LICENSE
+
+13) SUGERENCIA DE PRIORIDAD DE IMPLEMENTACIÓN
+1) Validar envs y .env.example (alto)
+2) Manejo de errores y UX (alto)
+3) Validaciones de datos (alto)
+4) CI y lint (medio)
+5) Tests (medio)
+6) RLS en Supabase y auditoría de dependencias (medio/alto)
+7) Documentación final y LICENSE (bajo)
+
+Si quieres, puedo implementar los cambios básicos (validación en src/lib/supabase.js, crear .env.example y agregar un workflow CI) y abrir un commit con esos archivos. ¿Los agrego ahora? (Responde "sí" para que los cree y edite los archivos.)

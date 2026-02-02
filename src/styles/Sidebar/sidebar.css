@@ -1,0 +1,130 @@
+/* index.css - Versión de Pantalla Completa */
+
+/* Reset Base */
+.sidebar.is-closing {
+  pointer-events: none !important;
+  transform: translateX(-100%) !important;
+}
+
+* { 
+  box-sizing: border-box; 
+  margin: 0; 
+  padding: 0; 
+}
+
+body { 
+  font-family: 'Inter', sans-serif; 
+  background-color: #f1f5f9; 
+  color: #1e293b; 
+  overflow-x: hidden; /* Evita scroll horizontal innecesario */
+}
+
+/* --- ESTRUCTURA GLOBAL --- */
+
+.main-layout {
+  display: block; /* Cambiado de flex a block para permitir que el sidebar flote */
+  width: 100%;
+  min-height: 100vh;
+  position: relative;
+}
+
+.content-area {
+  width: 100%;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  transition: all 0.3s ease;
+  /* El padding-left se puede ajustar si quisieras que el contenido se mueva, 
+     pero para "Ocultación Total" lo dejamos en 0 */
+  padding-left: 0; 
+}
+
+/* --- DASHBOARD GRID (SISTEMA DE 6 COLUMNAS) --- */
+
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 20px;
+  padding: 20px;
+  max-width: 100%; /* Ocupa todo el ancho disponible */
+  margin: 0 auto;
+}
+
+/* Clases de utilidad para el Grid */
+.grid-col-2 { grid-column: span 2; }
+.grid-col-3 { grid-column: span 3; }
+
+/* Tarjeta Base Universal */
+.manual-card, .review-card, .card, .scraper-card, .settings-card, .invoice-card {
+  background: white;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  padding: 20px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* --- RESPONSIVO --- */
+
+@media (max-width: 1200px) {
+  .dashboard-grid {
+    grid-template-columns: repeat(2, 1fr); /* En pantallas medianas, 2 columnas */
+  }
+  .grid-col-2, .grid-col-3, [style*="grid-column: span 4"] {
+    grid-column: span 2 !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .dashboard-grid {
+    grid-template-columns: 1fr; /* En móvil, todo en una fila */
+  }
+  .grid-col-2, .grid-col-3, [style*="grid-column: span 4"], [style*="grid-column: span 1"] {
+    grid-column: span 1 !important;
+  }
+}
+
+/* --- FORMULARIOS GLOBALES --- */
+
+.form-group {
+  margin-bottom: 12px;
+}
+
+.form-label {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #64748b;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+}
+
+.input-standard, 
+.textarea-standard {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-family: 'Inter', sans-serif;
+  font-size: 0.9rem;
+  transition: all 0.2s;
+  background-color: white;
+}
+
+.input-standard:focus, 
+.textarea-standard:focus {
+  outline: none;
+  border-color: #10b981; /* Verde esmeralda para coincidir con tu logo */
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1);
+}
+
+.loading-state {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  font-weight: 600;
+  color: #64748b;
+}
