@@ -1,50 +1,75 @@
 import { useState } from 'react';
 import { supabase } from '../lib/supabase';
-import { Lock } from 'lucide-react'; // Opcional: para darle un toque visual
+import { Lock, Mail, AlertCircle, Loader2 } from 'lucide-react';
 import '../styles/Login.css';
 
 const Login = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
 
   const handleLogin = async (e) => {
     e.preventDefault();
     setLoading(true);
+    setErrorMsg('');
     
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+    try {
+      // 1. Limpiamos cualquier rastro de sesión previa
+      await supabase.auth.signOut();
 
-    if (error) alert(error.message);
-    setLoading(false);
+      // 2. Intentamos el login
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password: password,
+      });
+
+      if (error) throw error;
+
+    } catch (error) {
+      console.error('Error de autenticación:', error.message);
+      setErrorMsg('Credenciales inválidas. Por favor, revisa tu correo y contraseña.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
     <div className="login-screen">
       <div className="manual-card login-container">
         <div className="login-header">
-          <Lock size={32} className="icon-blue" />
+          <div className="icon-circle">
+            <Lock size={32} className="icon-blue" />
+          </div>
           <h2>Inventory Hub</h2>
-          <p className="form-label">Ingresa tus credenciales</p>
+          <p>Acceso Protegido</p>
         </div>
 
-        <form onSubmit={handleLogin}>
+        {errorMsg && (
+          <div className="error-message">
+            <AlertCircle size={16} />
+            <span>{errorMsg}</span>
+          </div>
+        )}
+
+        <form onSubmit={handleLogin} className="login-form">
           <div className="input-field">
-            <label className="form-label">Email</label>
-            <input 
-              className="input-standard"
-              type="email" 
-              placeholder="correo@ejemplo.com" 
-              value={email} 
-              onChange={(e) => setEmail(e.target.value)} 
-              required 
-            />
+            <label>Correo Electrónico</label>
+            <div className="input-with-icon">
+              <Mail size={18} className="input-icon" />
+              <input 
+                className="input-standard"
+                type="email" 
+                placeholder="usuario@empresa.com" 
+                value={email} 
+                onChange={(e) => setEmail(e.target.value)} 
+                required 
+              />
+            </div>
           </div>
 
           <div className="input-field">
-            <label className="form-label">Contraseña</label>
+            <label>Contraseña</label>
             <input 
               className="input-standard"
               type="password" 
@@ -57,11 +82,14 @@ const Login = () => {
 
           <button 
             type="submit" 
-            className="btn btn-success" 
-            style={{ width: '100%', marginTop: '10px' }} 
+            className="btn btn-primary btn-full" 
             disabled={loading}
           >
-            {loading ? 'Verificando...' : 'Iniciar Sesión'}
+            {loading ? (
+              <><Loader2 className="spinner" size={18} /> Verificando...</>
+            ) : (
+              'Iniciar Sesión'
+            )}
           </button>
         </form>
       </div>

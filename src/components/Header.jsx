@@ -17,7 +17,7 @@ const Header = ({ onUpload }) => {
     <header className="main-header">
       <div className="logo-section">
         <Database size={24} />
-        <h1>Inventory Hub QBO</h1>
+        <h1>LCP-Link</h1>
       </div>
       
       <div style={{ display: 'flex', gap: '10px' }}>

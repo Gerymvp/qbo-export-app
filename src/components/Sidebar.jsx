@@ -17,8 +17,8 @@ const Sidebar = ({ isCollapsed, setIsCollapsed, currentView, setCurrentView }) =
 
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard QBO', icon: <LayoutDashboard size={22} strokeWidth={1.5} /> },
-    { id: 'inventario', label: 'Inventario Pro', icon: <Package size={22} strokeWidth={1.5} /> },
     { id: 'facturacion', label: 'Facturación', icon: <Calculator size={22} strokeWidth={1.5} /> },
+    { id: 'inventario', label: 'Inventario Pro', icon: <Package size={22} strokeWidth={1.5} /> },
   ];
 
   // Función mejorada para cerrar el sidebar
@@ -51,7 +51,7 @@ const Sidebar = ({ isCollapsed, setIsCollapsed, currentView, setCurrentView }) =
             <span>QBO Export</span>
           </div>
           {/* Botón de cierre con la nueva lógica */}
-          <button className="close-sidebar-btn" onClick={handleClose}>
+          <button className="btn btn-success" onClick={handleClose}>
             <ChevronLeft size={20} />
           </button>
         </div>

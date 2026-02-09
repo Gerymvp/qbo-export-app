@@ -1,0 +1,107 @@
+/* --- Estilos Base del Contenedor --- */
+.facturacion-container {
+  position: relative;
+  min-height: 100vh;
+  padding: 20px;
+  background-color: #f1f5f9; /* Color de fondo suave */
+}
+
+/* --- Encabezado del Dashboard --- */
+.facturacion-header-dashboard {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 30px;
+  background: white;
+  padding: 20px;
+  border-radius: 12px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+.facturacion-header-dashboard h2 {
+  margin: 0 0 5px 0;
+  color: #1e293b;
+}
+
+/* --- Estados (Pills) --- */
+.status-pill {
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-weight: bold;
+}
+
+.status-pill.active {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.status-pill.inactive {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+/* --- Botón Flotante de Bandeja (Gmail) --- */
+.floating-inbox-btn {
+  position: fixed;
+  right: 30px;
+  bottom: 30px;
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background: #2563eb;
+  color: white;
+  border: none;
+  box-shadow: 0 4px 15px rgba(37, 99, 235, 0.4);
+  cursor: pointer;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.2s ease, background-color 0.2s;
+}
+
+.floating-inbox-btn:hover {
+  transform: scale(1.1);
+  background-color: #1d4ed8;
+}
+
+.notif-dot {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  background: #ef4444;
+  color: white;
+  font-size: 10px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+}
+
+/* --- Estado Vacío (Empty State) --- */
+.empty-state-card {
+  text-align: center;
+  padding: 80px;
+  background: white;
+  border-radius: 16px;
+  border: 2px dashed #e2e8f0;
+  margin-top: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.empty-state-card h3 {
+  color: #475569;
+  margin: 10px 0;
+}
+
+.empty-state-card p {
+  color: #94a3b8;
+  margin-bottom: 20px;
+}
