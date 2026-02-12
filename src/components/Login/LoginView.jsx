@@ -1,39 +1,13 @@
-/*import { useState } from 'react';
-import { supabase } from '../lib/supabase';
+import React from 'react';
 import { Lock, Mail, AlertCircle, Loader2 } from 'lucide-react';
-import '../styles/Login.css';
+import '../../styles/Login.css';
 
-const Login = () => {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [errorMsg, setErrorMsg] = useState('');
-
-  const handleLogin = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-    setErrorMsg('');
-    
-    try {
-      // 1. Limpiamos cualquier rastro de sesión previa
-      await supabase.auth.signOut();
-
-      // 2. Intentamos el login
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: email.trim(),
-        password: password,
-      });
-
-      if (error) throw error;
-
-    } catch (error) {
-      console.error('Error de autenticación:', error.message);
-      setErrorMsg('Credenciales inválidas. Por favor, revisa tu correo y contraseña.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
+const LoginView = ({ 
+  email, setEmail, 
+  password, setPassword, 
+  loading, errorMsg, 
+  handleLogin 
+}) => {
   return (
     <div className="login-screen">
       <div className="manual-card login-container">
@@ -97,4 +71,4 @@ const Login = () => {
   );
 };
 
-export default Login; */
+export default LoginView;

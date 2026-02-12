@@ -2,7 +2,7 @@ import React from 'react';
 import '../../styles/btn.css';
 import '../../styles/Facturacion/F_ReviewTable.css';
 
-const ReviewTable = ({ data, onUpdateItem, onSendToQBO, onClearTable }) => {
+const ReviewTable = ({ data, qboAccounts, qboVendors, onUpdateItem, onSendToQBO, onClearTable }) => {
   if (!data) return null;
 
   // Calculamos totales dinámicamente con precisión
@@ -13,8 +13,38 @@ const ReviewTable = ({ data, onUpdateItem, onSendToQBO, onClearTable }) => {
     <div className="review-card">
       <div className="review-header">
         <div>
-          <h3 className="provider-title">{data.proveedor}</h3>
-          <p className="ruc-info">RUC: {data.ruc} | CUFE: {data.cufe?.substring(0, 45)}...</p>
+          <h3 className="provider-title">Factura de: {data.proveedor}</h3>
+          
+          {/* Selector de Proveedor QBO */}
+          <div style={{ marginTop: '10px' }}>
+            <label style={{ fontSize: '12px', color: '#64748b', fontWeight: '500' }}>
+              Vincular con Proveedor en QBO:
+            </label>
+            <select 
+              className="input-ghost" // Usando clase existente para mantener estilo
+              style={{ 
+                display: 'block', 
+                width: '100%', 
+                marginTop: '5px',
+                border: '1px solid #e2e8f0',
+                borderRadius: '4px',
+                padding: '4px 8px'
+              }}
+              value={data.vendorId || ''}
+              onChange={(e) => onUpdateItem('header', 'vendorId', e.target.value)}
+            >
+              <option value="">-- Seleccionar Proveedor de QuickBooks --</option>
+              {qboVendors.map((v) => (
+                <option key={v.Id} value={v.Id}>
+                  {v.DisplayName}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <p className="ruc-info" style={{ marginTop: '8px' }}>
+            RUC: {data.ruc} | CUFE: {data.cufe?.substring(0, 45)}...
+          </p>
         </div>
         <div className="header-actions">
           <button className="btn btn-danger" onClick={onClearTable}>Vaciar Tabla</button>
@@ -56,7 +86,6 @@ const ReviewTable = ({ data, onUpdateItem, onSendToQBO, onClearTable }) => {
                   />
                 </td>
                 <td className="text-center">{item.cantidad}</td>
-                {/* Formateo solo visual */}
                 <td>B/. {Number(item.precioUnitario).toFixed(2)}</td>
                 <td className={`tax-value ${item.taxSelected ? 'active' : ''}`}>
                   {Number(item.valITBMS || 0).toFixed(2)}
@@ -69,9 +98,11 @@ const ReviewTable = ({ data, onUpdateItem, onSendToQBO, onClearTable }) => {
                     onChange={(e) => onUpdateItem(index, 'account', e.target.value)}
                   >
                     <option value="">Seleccionar cuenta...</option>
-                    <option value="6000">Inventario - Libros</option>
-                    <option value="5100">Gasto - Papelería</option>
-                    <option value="5200">Gasto - Otros</option>
+                    {qboAccounts.map((acc) => (
+                      <option key={acc.Id} value={acc.Id}>
+                        {acc.Name}
+                      </option>
+                    ))}
                   </select>
                 </td>
               </tr>

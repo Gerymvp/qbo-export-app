@@ -1,107 +1,40 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { supabase } from '../lib/supabase'; 
-import { parseInvoiceXML } from '../utils/xmlParser';
-import ReviewTable from '../components/facturacion/ReviewTable';
-import InboxDrawer from '../components/facturacion/InboxDrawer';
-import { Mail, RefreshCw, LogOut, UploadCloud, Link as LinkIcon } from 'lucide-react';
+import React from 'react';
+import { Mail } from 'lucide-react';
+import { supabase } from '../lib/supabase';
+import { useFacturacion } from '../hooks/useFacturacion';
 
-// Importación de estilos externos
+// Sub-componentes
+import F_Header from '../components/facturacion/F_Header';
+import F_EmptyState from '../components/facturacion/F_EmptyState';
+import ReviewTable from '../components/facturacion/F_ReviewTable';
+import InboxDrawer from '../components/facturacion/InboxDrawer';
+
+//styles
 import '../styles/Facturacion/facturacion.css';
-import '../styles/btn.css';
 
 const Facturacion = () => {
-  const [invoiceData, setInvoiceData] = useState(null);
-  const [isConnected, setIsConnected] = useState(false);
-  const [realmId, setRealmId] = useState(null);
-  const [pendientes, setPendientes] = useState([]);
-  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const {
+    invoiceData, 
+    setInvoiceData, 
+    isConnected, 
+    realmId, 
+    pendientes, 
+    isDrawerOpen, 
+    setIsDrawerOpen, 
+    fetchPendientes,
+    processNewInvoice, 
+    handleUpdateItem,
+    qboAccounts,
+    qboVendors,
+    // --- EXTRACCIÓN DE LA FUNCIÓN DESDE EL HOOK ---
+    enviarAQuickBooks 
+  } = useFacturacion();
 
-  useEffect(() => {
-    const sync = () => {
-      const status = localStorage.getItem('qbo_connected');
-      const rId = localStorage.getItem('qbo_realmId');
-      setIsConnected(status === 'true');
-      setRealmId(rId);
-    };
-    sync();
-    window.addEventListener('storage', sync);
-    return () => window.removeEventListener('storage', sync);
-  }, []);
-
+  // Handlers locales para la interfaz
   const handleConnectQBO = () => {
     const clientId = 'ABK9ko4wbz4pMUSYqrcqqlHIKKeqXXlJ6AODNyy9Khl6X9td6V';
     const redirectUri = encodeURIComponent('http://localhost:5173/'); 
-    const scope = 'com.intuit.quickbooks.accounting';
-    const state = 'pma_' + Math.random().toString(36).substring(7);
-    window.location.href = `https://appcenter.intuit.com/connect/oauth2?client_id=${clientId}&response_type=code&scope=${scope}&redirect_uri=${redirectUri}&state=${state}`;
-  };
-
-  const handleLogoutQBO = () => {
-    localStorage.removeItem('qbo_connected');
-    localStorage.removeItem('qbo_realmId');
-    setIsConnected(false);
-    setRealmId(null);
-  };
-
-  const handleUpdateItem = (index, field, value) => {
-    const newData = { ...invoiceData };
-    const item = newData.items[index];
-
-    if (field === 'taxSelected') {
-      item.taxSelected = value;
-      const totalFijo = Number(item.totalOriginal);
-      const cantidad = Number(item.cantidad);
-
-      if (value === true) {
-        const baseImponible = totalFijo / 1.07;
-        const impuesto = totalFijo - baseImponible;
-        item.precioUnitario = baseImponible / cantidad;
-        item.valITBMS = impuesto;
-        item.totalItem = totalFijo; 
-      } else {
-        item.precioUnitario = totalFijo / cantidad;
-        item.valITBMS = 0;
-        item.totalItem = totalFijo;
-      }
-    } else {
-      item[field] = value;
-    }
-    setInvoiceData(newData);
-  };
-
-  const processNewInvoice = (xmlContent) => {
-    const parsed = parseInvoiceXML(xmlContent);
-    parsed.items = parsed.items.map(it => ({ 
-      ...it, 
-      totalOriginal: Number(it.totalItem), 
-      taxSelected: false,
-      valITBMS: 0,
-      totalItem: Number(it.totalItem),
-      precioUnitario: Number(it.precioUnitario)
-    }));
-    setInvoiceData(parsed);
-  };
-
-  const fetchPendientes = useCallback(async () => {
-    const { data, error } = await supabase
-      .from('facturas_pendientes')
-      .select('*')
-      .eq('status', 'pendiente')
-      .order('fecha_recepcion', { ascending: false }); 
-    if (!error) setPendientes(data || []);
-  }, []);
-
-  useEffect(() => {
-    fetchPendientes();
-    const channel = supabase.channel('facturas-gmail')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'facturas_pendientes' }, fetchPendientes)
-      .subscribe();
-    return () => supabase.removeChannel(channel);
-  }, [fetchPendientes]);
-
-  const handleSelectPendiente = (factura) => {
-    processNewInvoice(factura.xml_content);
-    setIsDrawerOpen(false);
+    window.location.href = `https://appcenter.intuit.com/connect/oauth2?client_id=${clientId}&response_type=code&scope=com.intuit.quickbooks.accounting&redirect_uri=${redirectUri}&state=pma_${Math.random().toString(36).substring(7)}`;
   };
 
   const handleFileUpload = (e) => {
@@ -124,54 +57,34 @@ const Facturacion = () => {
         isOpen={isDrawerOpen} 
         onClose={() => setIsDrawerOpen(false)}
         pendientes={pendientes}
-        onSelect={handleSelectPendiente}
+        onSelect={(f) => { processNewInvoice(f.xml_content); setIsDrawerOpen(false); }}
         onDelete={async (id) => {
-           const { error } = await supabase.from('facturas_pendientes').delete().eq('id', id);
-           if (!error) fetchPendientes();
+          await supabase.from('facturas_pendientes').delete().eq('id', id);
+          fetchPendientes();
         }} 
       />
 
-      <header className="facturacion-header-dashboard">
-        <div>
-          <h2>Gestor de Facturas</h2>
-          <span className={`status-pill ${isConnected ? 'active' : 'inactive'}`}>
-            {isConnected ? `🟢 Empresa: ${realmId}` : "🔴 QuickBooks Desconectado"}
-          </span>
-        </div>
-        <div style={{ display: 'flex', gap: '10px' }}>
-          {isConnected ? (
-            <button className="btn btn-danger" onClick={handleLogoutQBO}>
-              <LogOut size={16} /> Cerrar Sesión
-            </button>
-          ) : (
-            <button className="btn btn-primary" onClick={handleConnectQBO}>
-              <LinkIcon size={16} /> Conectar QuickBooks
-            </button>
-          )}
-          
-          <button className="btn btn-primary" onClick={fetchPendientes}>
-            <RefreshCw size={16} />
-          </button>
-        </div>
-      </header>
+      <F_Header 
+        isConnected={isConnected} 
+        realmId={realmId} 
+        onConnect={handleConnectQBO} 
+        onLogout={() => { localStorage.clear(); window.location.reload(); }} 
+        onRefresh={fetchPendientes} 
+      />
 
       <main>
         {invoiceData ? (
           <ReviewTable 
             data={invoiceData} 
+            qboAccounts={qboAccounts}
+            qboVendors={qboVendors}
             onUpdateItem={handleUpdateItem}
-            onSendToQBO={() => alert("Enviando a QBO...")}
+            // --- PASANDO LA FUNCIÓN DEL HOOK AL COMPONENTE ---
+            onSendToQBO={enviarAQuickBooks} 
             onClearTable={() => setInvoiceData(null)}
           />
         ) : (
-          <div className="empty-state-card">
-            <UploadCloud size={48} color="#cbd5e1" />
-            <h3>Cargar Factura</h3>
-            <label className="btn btn-success" style={{ marginTop: '20px', cursor: 'pointer' }}>
-              Subir XML Local
-              <input type="file" accept=".xml" onChange={handleFileUpload} style={{ display: 'none' }} />
-            </label>
-          </div>
+          <F_EmptyState onFileUpload={handleFileUpload} />
         )}
       </main>
     </div>

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Mail, X, ChevronRight, Clock, Trash2 } from 'lucide-react'; // Importamos Trash2
+import { Mail, X, ChevronRight, Clock, Trash2 } from 'lucide-react';
 import '../../styles/Facturacion/InboxDrawer.css';
 
 const InboxDrawer = ({ isOpen, onClose, pendientes, onSelect, onDelete }) => {
@@ -21,7 +21,7 @@ const InboxDrawer = ({ isOpen, onClose, pendientes, onSelect, onDelete }) => {
 
         <div className="drawer-content">
           <div className="drawer-info">
-            <small>Facturas enviadas por Fernando Velasquez</small>
+            <small>Facturas pendientes de procesar</small>
           </div>
           
           <div className="inbox-scroll-area">
@@ -37,23 +37,27 @@ const InboxDrawer = ({ isOpen, onClose, pendientes, onSelect, onDelete }) => {
                     <div className="provider-info">
                        <span className="item-provider">{f.proveedor || "XML Recibido"}</span>
                     </div>
-                      // En InboxDrawer.jsx, dentro del map de pendientes:
-                      <div className="item-actions">
-                        <button 
-                          className="btn btn-danger" // Cambiado de btn-danger-soft a btn-danger para usar btn.css
-                          onClick={(e) => {
-                            e.stopPropagation(); 
-                            if(window.confirm('¿Eliminar esta factura?')) onDelete(f.id); //
-                          }}
-                        >
-                          <Trash2 size={18} />
-                        </button>
-                        <ChevronRight size={16} className="arrow-icon" />
-                      </div>
+                    
+                    <div className="item-actions">
+                      <button 
+                        className="btn btn-danger" 
+                        onClick={(e) => {
+                          e.stopPropagation(); 
+                          if(window.confirm('¿Eliminar esta factura?')) onDelete(f.id);
+                        }}
+                      >
+                        <Trash2 size={18} />
+                      </button>
+                      <ChevronRight size={16} className="arrow-icon" />
+                    </div>
                   </div>
                   <div className="item-meta">
                     <Clock size={12} />
-                    <span>{new Date(f.fecha_recepcion).toLocaleDateString()}</span>
+                    <span>
+                      {f.fecha_recepcion 
+                        ? new Date(f.fecha_recepcion).toLocaleDateString() 
+                        : 'Sin fecha'}
+                    </span>
                   </div>
                 </div>
               ))

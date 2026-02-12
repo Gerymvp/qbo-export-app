@@ -1,26 +1,38 @@
-const QBO_BASE_URL = 'https://sandbox-quickbooks.api.intuit.com/v3/company'; 
-// Cambiar a 'https://quickbooks.api.intuit.com' cuando pases a producción
+import { supabase } from '../lib/supabase';
 
+/**
+ * Envía una factura (Bill) a QuickBooks a través de una Edge Function de Supabase
+ * para evitar bloqueos de CORS y manejar la autenticación de forma segura.
+ */
 export const sendBillToQBO = async (realmId, accessToken, billData) => {
   try {
-    const response = await fetch(`${QBO_BASE_URL}/${realmId}/bill`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${accessToken}`,
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
-      },
-      body: JSON.stringify(billData)
+    // Invocamos la Edge Function 'create-qbo-bill'
+    const { data, error } = await supabase.functions.invoke('create-qbo-bill', {
+      body: { 
+        realmId, 
+        token: accessToken, 
+        bill: billData 
+      }
     });
 
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.Fault.Error[0].Message || 'Error al enviar a QBO');
+    // Error de red o de la plataforma Supabase
+    if (error) {
+      console.error("Error al invocar la Edge Function:", error);
+      throw new Error(`Error de conexión: ${error.message}`);
     }
 
-    return await response.json();
+    // Manejo de errores específicos devueltos por la API de QuickBooks
+    if (data && data.Fault) {
+      const msg = data.Fault.Error[0]?.Message || 'Error desconocido en QuickBooks';
+      const detail = data.Fault.Error[0]?.Detail || '';
+      throw new Error(`${msg}: ${detail}`);
+    }
+
+    // Si todo salió bien, devolvemos la respuesta de QBO
+    return data;
+
   } catch (error) {
-    console.error("Error en QBO Service:", error);
+    console.error("Error en sendBillToQBO:", error);
     throw error;
   }
 };
