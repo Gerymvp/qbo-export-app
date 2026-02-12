@@ -1585,5 +1585,5 @@ Ejemplos de tests:
 
 **Última nota**: Este sistema está diseñado para ser escalable. Si necesitas agregar más usuarios, empresas, o integraciones, la arquitectura soporta. Solo asegúrate de implementar RLS correctamente y auditoría de cambios.
 
-¡Éxito con el proyecto! 🚀
+¡Te deseo éxito!
 

@@ -47,8 +47,8 @@ const Sidebar = ({ isCollapsed, setIsCollapsed, currentView, setCurrentView }) =
       <aside className={`sidebar ${isCollapsed ? 'collapsed' : ''} ${isClosing ? 'is-closing' : ''}`}>
         <div className="sidebar-header">
           <div className="sidebar-logo">
-            <Database size={24} />
-            <span>QBO Export</span>
+            {/*<Database size={14} />*/}
+            <span> LCP-LINK </span>
           </div>
           {/* Botón de cierre con la nueva lógica */}
           <button className="btn btn-success" onClick={handleClose}>
