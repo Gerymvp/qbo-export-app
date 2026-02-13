@@ -61,7 +61,7 @@ export const useFacturacion = () => {
     }
   }, [isConnected, realmId, fetchQboAccounts, fetchQboVendors]);
 
-  // 3. Gestión de Facturas Pendientes (Base de Datos)
+  // 3. Gestión de Facturas Pendientes
   const fetchPendientes = useCallback(async () => {
     try {
       const { data, error } = await supabase
@@ -87,54 +87,75 @@ export const useFacturacion = () => {
     return () => { supabase.removeChannel(channel); };
   }, [fetchPendientes]);
 
-  // 4. Procesamiento de XML (CORREGIDO PARA INCLUIR EL ID)
-  const processNewInvoice = (xmlContent, dbId = null) => {
-    try {
-      const parsed = parseInvoiceXML(xmlContent);
-      parsed.id = dbId; // Mantenemos el ID original de Supabase para el PATCH posterior
-      parsed.items = (parsed.items || []).map(it => ({ 
+  // 4. Procesamiento de XML
+// Dentro de useFacturacion.js
+const processNewInvoice = (xmlContent, dbId = null) => {
+  try {
+    const parsed = parseInvoiceXML(xmlContent);
+    parsed.id = dbId;
+    
+    parsed.items = (parsed.items || []).map(it => {
+      const totalOriginal = Number(it.totalItem);
+      const cantidad = Number(it.cantidad) || 1;
+      
+      return { 
         ...it, 
-        totalOriginal: Number(it.totalItem), 
+        totalOriginal: totalOriginal, 
         taxSelected: false,
         valITBMS: 0,
-        totalItem: Number(it.totalItem),
-        precioUnitario: Number(it.precioUnitario),
+        totalItem: totalOriginal,
+        // CORRECCIÓN: Calcular el unitario real basado en el total del XML
+        // Esto absorbe descuentos previos del XML automáticamente
+        precioUnitario: totalOriginal / cantidad, 
         account: '' 
-      }));
-      setInvoiceData(parsed);
-    } catch (err) { 
-      console.error("Error en processNewInvoice:", err);
-      alert("Error al procesar el XML de la factura."); 
-    }
-  };
+      };
+    });
+    setInvoiceData(parsed);
+  } catch (err) { 
+    console.error("Error en processNewInvoice:", err);
+    alert("Error al procesar el XML."); 
+  }
+};
 
   const handleUpdateItem = (index, field, value) => {
     if (!invoiceData) return;
+    
+    // Clonamos el estado para evitar mutaciones directas
     const newData = { ...invoiceData };
+    
     if (index === 'header') {
       newData[field] = value;
     } else {
-      const item = newData.items[index];
+      // Clonamos el item específico
+      const item = { ...newData.items[index] };
+      
       if (field === 'taxSelected') {
         item.taxSelected = value;
         const totalFijo = Number(item.totalOriginal);
+        const cant = Number(item.cantidad) || 1;
+
         if (value) {
-          const base = totalFijo / 1.07;
-          item.precioUnitario = base / item.cantidad;
-          item.valITBMS = totalFijo - base;
+          // Desglose: Base = Total / 1.07
+          const baseTotal = totalFijo / 1.07;
+          item.valITBMS = totalFijo - baseTotal;
+          item.precioUnitario = baseTotal / cant;
         } else {
-          item.precioUnitario = totalFijo / item.cantidad;
+          // Sin impuesto: Base = Total
           item.valITBMS = 0;
+          item.precioUnitario = totalFijo / cant;
         }
         item.totalItem = totalFijo;
       } else { 
         item[field] = value; 
       }
+      
+      // Reinsertamos el item clonado en el array
+      newData.items[index] = item;
     }
     setInvoiceData(newData);
   };
 
-  // 5. Envío a QBO y Actualización de Estado (CORREGIDO)
+  // 5. Envío a QBO
   const enviarAQuickBooks = async () => {
     if (!invoiceData?.vendorId) return alert("Selecciona un proveedor de QBO.");
     if (invoiceData.items.some(item => !item.account)) return alert("Asigna una cuenta a todos los productos.");
@@ -146,24 +167,20 @@ export const useFacturacion = () => {
       const billPayload = {
         VendorRef: { value: invoiceData.vendorId },
         Line: invoiceData.items.map(item => ({
-          Amount: item.totalItem,
+          Amount: Number(item.totalItem).toFixed(2),
           DetailType: "AccountBasedExpenseLineDetail",
           AccountBasedExpenseLineDetail: { AccountRef: { value: item.account } },
           Description: item.descripcion
         }))
       };
 
-      // 1. Enviar a QBO
       await sendBillToQBO(realmId, tokenData.access_token, billPayload);
       
-      // 2. Actualizar estado en Supabase (Solo si hay un ID válido)
       if (invoiceData.id) {
-        const { error: updateError } = await supabase
+        await supabase
           .from('facturas_pendientes')
           .update({ status: 'procesada' })
           .eq('id', invoiceData.id);
-        
-        if (updateError) console.error("Error al actualizar estado:", updateError);
       }
       
       alert("Factura enviada a QuickBooks con éxito");

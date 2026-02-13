@@ -5,7 +5,7 @@ import '../../styles/Facturacion/F_ReviewTable.css';
 const ReviewTable = ({ data, qboAccounts, qboVendors, onUpdateItem, onSendToQBO, onClearTable }) => {
   if (!data) return null;
 
-  // Calculamos totales dinámicamente con precisión
+  // Calculamos totales dinámicamente basándonos en los valores del estado actual
   const totalITBMS = data.items.reduce((acc, i) => acc + (Number(i.valITBMS) || 0), 0);
   const totalFactura = data.items.reduce((acc, i) => acc + (Number(i.totalItem) || 0), 0);
 
@@ -21,7 +21,7 @@ const ReviewTable = ({ data, qboAccounts, qboVendors, onUpdateItem, onSendToQBO,
               Vincular con Proveedor en QBO:
             </label>
             <select 
-              className="input-ghost" // Usando clase existente para mantener estilo
+              className="input-ghost"
               style={{ 
                 display: 'block', 
                 width: '100%', 
@@ -86,11 +86,18 @@ const ReviewTable = ({ data, qboAccounts, qboVendors, onUpdateItem, onSendToQBO,
                   />
                 </td>
                 <td className="text-center">{item.cantidad}</td>
+                
+                {/* PRECIO UNITARIO: Muestra el valor neto (Base / Cantidad) calculado en el hook */}
                 <td>B/. {Number(item.precioUnitario).toFixed(2)}</td>
+                
+                {/* ITBMS: Valor del impuesto calculado hacia atrás */}
                 <td className={`tax-value ${item.taxSelected ? 'active' : ''}`}>
                   {Number(item.valITBMS || 0).toFixed(2)}
                 </td>
+                
+                {/* TOTAL: Se mantiene fijo según el totalOriginal del XML */}
                 <td className="total-cell">B/. {Number(item.totalItem).toFixed(2)}</td>
+                
                 <td>
                   <select 
                     className="input-ghost" 
