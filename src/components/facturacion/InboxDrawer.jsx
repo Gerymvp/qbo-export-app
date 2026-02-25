@@ -22,6 +22,24 @@ const InboxDrawer = ({ isOpen, onClose, pendientes, onSelect, onDelete }) => {
         <div className="drawer-content">
           <div className="drawer-info">
             <small>Facturas pendientes de procesar</small>
+            {pendientes.length > 0 && (
+              <button 
+                onClick={onDeleteAll}
+                className="btn-link-danger" 
+                style={{ 
+                  background: 'none', 
+                  border: 'none', 
+                  color: '#ef4444', 
+                  fontSize: '12px', 
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px'
+                }}
+              >
+                <Trash2 size={14} /> Vaciar bandeja
+              </button>
+            )}
           </div>
           
           <div className="inbox-scroll-area">

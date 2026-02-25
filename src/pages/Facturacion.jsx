@@ -62,6 +62,12 @@ const Facturacion = () => {
           await supabase.from('facturas_pendientes').delete().eq('id', id);
           fetchPendientes();
         }} 
+        onDeleteAll={async () => {
+          if (window.confirm('¿Estás seguro de que deseas eliminar TODAS las facturas de la bandeja?')) {
+            const { error } = await supabase.from('facturas_pendientes').delete().neq('id', 0); // Elimina todos
+            if (!error) fetchPendientes();
+          }
+        }}
       />
 
       <F_Header 
