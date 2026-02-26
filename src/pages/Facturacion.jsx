@@ -29,7 +29,7 @@ const Facturacion = () => {
     enviarAQuickBooks 
   } = useFacturacion();
 
-  // REFERENCIA PARA EVITAR DOBLE EJECUCIÓN
+  // REFERENCIA PARA EVITAR DOBLE EJECUCIÓN (Strict Mode)
   const exchangeStarted = useRef(false);
 
   useEffect(() => {
@@ -40,27 +40,42 @@ const Facturacion = () => {
     if (code && rId && !exchangeStarted.current) {
       exchangeStarted.current = true;
 
-      // Limpiar la URL inmediatamente
+      // Limpiar la URL inmediatamente para evitar re-ejecuciones al recargar
       window.history.replaceState({}, document.title, window.location.origin);
 
       const handleTokenExchange = async () => {
         try {
           console.log("Iniciando intercambio de tokens único...");
+          
+          // 1. Obtener la sesión actual para el header de autorización
+          const { data: { session } } = await supabase.auth.getSession();
+          
+          if (!session) {
+            throw new Error("No se encontró una sesión de usuario activa.");
+          }
+
+          // 2. Invocar la función pasando el JWT en los headers
           const { data, error } = await supabase.functions.invoke('qbo-oauth-handler', {
-            body: { code, realmId: rId }
+            body: { code, realmId: rId },
+            headers: {
+              Authorization: `Bearer ${session.access_token}`
+            }
           });
 
           if (error) throw error;
 
-          // Guardar estado de conexión exitosa
+          // 3. Guardar estado de conexión exitosa en persistencia local
           localStorage.setItem('qbo_connected', 'true');
           localStorage.setItem('qbo_realmId', rId);
           
-          // Recargar para que el hook useFacturacion detecte los nuevos tokens
+          console.log("Intercambio exitoso:", data.message);
+          
+          // Recargar para que useFacturacion inicialice los estados con los nuevos datos
           window.location.reload(); 
         } catch (err) {
           console.error("Error en intercambio OAuth:", err);
-          alert("Error de conexión: El código de QuickBooks ya expiró o es inválido. Por favor, intenta conectar de nuevo.");
+          alert(`Error de conexión: ${err.message || "El código de QuickBooks expiró."}`);
+          exchangeStarted.current = false; // Permitir reintento si falla
         }
       };
 
@@ -72,10 +87,8 @@ const Facturacion = () => {
     // Client ID de Producción
     const clientId = 'ABHJF9iKHUtsgJwew9TtBQmoFjal8zRArUbW4DRFUXlTFLu5PQ';
     
-    // IMPORTANTE: Debe ser EXACTAMENTE igual a la configurada en Intuit y en la Edge Function
-    // Quitamos window.location.origin para evitar variaciones con "/" al final.
+    // El redirectUri debe coincidir exactamente con el configurado en Intuit Developer Portal
     const redirectUri = encodeURIComponent('https://qbo-export-app.vercel.app'); 
-    
     const state = `pma_${Math.random().toString(36).substring(7)}`;
 
     window.location.href = `https://appcenter.intuit.com/connect/oauth2?client_id=${clientId}&response_type=code&scope=com.intuit.quickbooks.accounting&redirect_uri=${redirectUri}&state=${state}`;
@@ -92,6 +105,7 @@ const Facturacion = () => {
 
   return (
     <div className="facturacion-container">
+      {/* Botón flotante para la bandeja de entrada */}
       <button className="floating-inbox-btn" onClick={() => setIsDrawerOpen(true)}>
         <Mail size={24} />
         {pendientes.length > 0 && <span className="notif-dot">{pendientes.length}</span>}
@@ -101,30 +115,33 @@ const Facturacion = () => {
         isOpen={isDrawerOpen} 
         onClose={() => setIsDrawerOpen(false)}
         pendientes={pendientes}
-        onSelect={(f) => { processNewInvoice(f.xml_content, f.id); setIsDrawerOpen(false); }}
+        onSelect={(f) => { 
+          processNewInvoice(f.xml_content, f.id); 
+          setIsDrawerOpen(false); 
+        }}
         onDelete={async (id) => {
-          await supabase.from('facturas_pendientes').delete().eq('id', id);
-          fetchPendientes();
+          const { error } = await supabase.from('facturas_pendientes').delete().eq('id', id);
+          if (!error) fetchPendientes();
         }} 
         onDeleteAll={async () => {
-            if (window.confirm('¿Estás seguro de que deseas eliminar TODAS las facturas de la bandeja?')) {
-              try {
-                const { error } = await supabase
-                  .from('facturas_pendientes')
-                  .delete()
-                  .not('id', 'is', null);
+          if (window.confirm('¿Estás seguro de que deseas eliminar TODAS las facturas de la bandeja?')) {
+            try {
+              const { error } = await supabase
+                .from('facturas_pendientes')
+                .delete()
+                .not('id', 'is', null);
 
-                if (error) throw error;
-                
-                await fetchPendientes();
-                alert('Bandeja vaciada con éxito');
-              } catch (error) {
-                console.error("Error al eliminar facturas:", error.message);
-                alert('No se pudieron eliminar las facturas: ' + error.message);
-              }
+              if (error) throw error;
+              
+              await fetchPendientes();
+              alert('Bandeja vaciada con éxito');
+            } catch (error) {
+              console.error("Error al eliminar facturas:", error.message);
+              alert('No se pudieron eliminar las facturas: ' + error.message);
             }
-          }}
-        />
+          }
+        }}
+      />
 
       <F_Header 
         isConnected={isConnected} 
