@@ -14,21 +14,33 @@ serve(async (req: Request) => {
     const { code, realmId } = await req.json()
     const clientId = Deno.env.get('INTUIT_CLIENT_ID')
     const clientSecret = Deno.env.get('INTUIT_CLIENT_SECRET')
-    
-    // 1. Validar Usuario (Forma nativa de Supabase)
+    const authHeader = req.headers.get('Authorization')
+
+    if (!authHeader) throw new Error("No se proporcionó token de autorización");
+
+    // 1. Validar Usuario con Supabase
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
-      { global: { headers: { Authorization: req.headers.get('Authorization')! } } }
+      Deno.env.get('SUPABASE_ANON_KEY') ?? ''
     )
-
-    const { data: { user }, error: authError } = await supabaseClient.auth.getUser()
-    if (authError || !user) throw new Error("Sesión inválida o expirada");
+    
+    // Extraer el token del Bearer
+    const token = authHeader.replace('Bearer ', '');
+    const { data: { user }, error: authError } = await supabaseClient.auth.getUser(token);
+    
+    if (authError || !user) {
+      console.error("Error Auth Supabase:", authError);
+      throw new Error("Sesión de Supabase inválida");
+    }
 
     // 2. Intercambio de Tokens con QBO
+    // ASEGÚRATE QUE ESTA URL SEA IDÉNTICA A LA DEL DASHBOARD DE INTUIT
     const redirectUri = 'https://qbo-export-app.vercel.app'; 
+    
     const basicAuth = btoa(`${clientId}:${clientSecret}`);
     
+    console.log("Intercambiando código para el usuario:", user.id);
+
     const tokenResponse = await fetch('https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer', {
       method: 'POST',
       headers: {
@@ -37,27 +49,34 @@ serve(async (req: Request) => {
       },
       body: new URLSearchParams({
         grant_type: 'authorization_code',
-        code,
+        code: code,
         redirect_uri: redirectUri,
       }),
     });
 
     const tokenData = await tokenResponse.json();
-    if (!tokenResponse.ok) throw new Error(tokenData.error_description || "Error en QBO");
 
-    // 3. Guardar usando Service Role (Admin) para evitar RLS
+    if (!tokenResponse.ok) {
+      console.error("Error de Intuit API:", tokenData);
+      throw new Error(tokenData.error_description || "Error en el intercambio de QuickBooks");
+    }
+
+    // 3. Guardar en Base de Datos usando Service Role
     const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
-    await supabaseAdmin.from('qbo_tokens').upsert({
+    const { error: upsertError } = await supabaseAdmin.from('qbo_tokens').upsert({
       user_id: user.id,
       access_token: tokenData.access_token,
       refresh_token: tokenData.refresh_token,
       realm_id: realmId,
-      expires_at: new Date(Date.now() + tokenData.expires_in * 1000).toISOString()
+      expires_at: new Date(Date.now() + tokenData.expires_in * 1000).toISOString(),
+      updated_at: new Date().toISOString()
     });
+
+    if (upsertError) throw upsertError;
 
     return new Response(JSON.stringify({ success: true }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -65,9 +84,10 @@ serve(async (req: Request) => {
     });
 
   } catch (error: any) {
+    console.error("Error fatal en la función:", error.message);
     return new Response(JSON.stringify({ error: error.message }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      status: 401, // Aquí es donde ves el 401 en la consola
+      status: 400, // Cambiado a 400 para evitar confusiones de auth si es error de QBO
     });
   }
 })
