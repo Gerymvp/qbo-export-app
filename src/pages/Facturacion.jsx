@@ -3,11 +3,13 @@ import { Mail } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useFacturacion } from '../hooks/useFacturacion';
 
+// Sub-componentes
 import F_Header from '../components/facturacion/F_Header';
 import F_EmptyState from '../components/facturacion/F_EmptyState';
 import ReviewTable from '../components/facturacion/F_ReviewTable';
 import InboxDrawer from '../components/facturacion/InboxDrawer';
 
+// Styles
 import '../styles/Facturacion/facturacion.css';
 
 const Facturacion = () => {
@@ -27,6 +29,7 @@ const Facturacion = () => {
     enviarAQuickBooks 
   } = useFacturacion();
 
+  // REFERENCIA PARA EVITAR DOBLE EJECUCIÓN (Strict Mode)
   const exchangeStarted = useRef(false);
 
   useEffect(() => {
@@ -39,38 +42,45 @@ const Facturacion = () => {
 
       const handleTokenExchange = async () => {
         try {
-          console.log("Iniciando intercambio para RealmID:", rId);
+          console.log("Iniciando intercambio de tokens único...");
           
-          // Verificar sesión activa antes de la invocación
+          // 1. Obtener la sesión para asegurar que el cliente de Supabase esté autenticado
           const { data: { session }, error: sessionError } = await supabase.auth.getSession();
           
           if (sessionError || !session) {
-            throw new Error("Sesión no activa. Por favor, inicia sesión de nuevo.");
+            throw new Error("No se encontró una sesión activa. Por favor, inicia sesión.");
           }
 
-          /**
-           * CAMBIO CLAVE PARA ELIMINAR EL 401:
-           * Eliminamos los headers manuales. El SDK de Supabase inyecta 
-           * automáticamente el Bearer token correcto si existe una sesión.
-           */
+          // 2. INVOCACIÓN CORREGIDA (FORZADA)
+          // NO pasamos headers manuales de Authorization. 
+          // El SDK de Supabase los inyecta automáticamente de forma correcta.
           const { data, error } = await supabase.functions.invoke('qbo-oauth-handler', {
             body: { code, realmId: rId }
           });
 
-          if (error) throw error;
+          if (error) {
+            console.error("Error devuelto por Supabase:", error);
+            throw error;
+          }
 
-          // Limpiar parámetros de la URL inmediatamente tras el éxito
+          // 3. Limpiar la URL inmediatamente tras el éxito
           window.history.replaceState({}, document.title, window.location.origin + window.location.pathname);
 
+          // 4. Guardar estado de conexión exitosa
           localStorage.setItem('qbo_connected', 'true');
           localStorage.setItem('qbo_realmId', rId);
           
-          console.log("Intercambio exitoso");
+          console.log("✅ Intercambio exitoso");
+          
+          // Recargar para que useFacturacion detecte los cambios
           window.location.reload(); 
         } catch (err) {
-          console.error("Error en intercambio OAuth:", err);
+          console.error("❌ Error en intercambio OAuth:", err);
+          
+          // Limpiar URL tras fallo para evitar bucles con códigos expirados
           window.history.replaceState({}, document.title, window.location.pathname);
-          alert(`Error: ${err.message}`);
+          
+          alert(`Error de conexión: ${err.message || "El código de QuickBooks ya expiró."}`);
           exchangeStarted.current = false;
         }
       };
@@ -81,7 +91,6 @@ const Facturacion = () => {
 
   const handleConnectQBO = () => {
     const clientId = 'ABHJF9iKHUtsgJwew9TtBQmoFjal8zRArUbW4DRFUXlTFLu5PQ';
-    // URI exacta registrada sin la barra final (/)
     const redirectUri = encodeURIComponent('https://qbo-export-app.vercel.app'); 
     const state = `pma_${Math.random().toString(36).substring(7)}`;
 
@@ -99,7 +108,11 @@ const Facturacion = () => {
 
   return (
     <div className="facturacion-container">
-      <button className="floating-inbox-btn" onClick={() => setIsDrawerOpen(true)}>
+      <button 
+        className="floating-inbox-btn" 
+        onClick={() => setIsDrawerOpen(true)}
+        title="Bandeja de facturas pendientes"
+      >
         <Mail size={24} />
         {pendientes.length > 0 && <span className="notif-dot">{pendientes.length}</span>}
       </button>
@@ -108,13 +121,16 @@ const Facturacion = () => {
         isOpen={isDrawerOpen} 
         onClose={() => setIsDrawerOpen(false)}
         pendientes={pendientes}
-        onSelect={(f) => { processNewInvoice(f.xml_content, f.id); setIsDrawerOpen(false); }}
+        onSelect={(f) => { 
+          processNewInvoice(f.xml_content, f.id); 
+          setIsDrawerOpen(false); 
+        }}
         onDelete={async (id) => {
           const { error } = await supabase.from('facturas_pendientes').delete().eq('id', id);
           if (!error) fetchPendientes();
         }} 
         onDeleteAll={async () => {
-          if (window.confirm('¿Eliminar todas?')) {
+          if (window.confirm('¿Eliminar todas las facturas?')) {
             const { error } = await supabase.from('facturas_pendientes').delete().not('id', 'is', null);
             if (!error) fetchPendientes();
           }
