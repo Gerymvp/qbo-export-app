@@ -19,7 +19,7 @@ serve(async (req) => {
     // Datos de tu Intuit Developer Portal (Cámbialos por tus credenciales reales)
     const clientId = 'ABK9ko4wbz4pMUSYqrcqqlHIKKeqXXlJ6AODNyy9Khl6X9td6V';
     const clientSecret = 'nAIFl0ICdoKrOPECt9sW6uXATxsjplOzuFq30r8O'; // <--- ¡PON TU SECRET AQUÍ!
-    const redirectUri = 'http://localhost:5173/';
+    const redirectUri = 'https://qbo-export-app.vercel.app/';
 
     // 2. Intercambiar código por Token con QuickBooks
     const authHeader = btoa(`${clientId}:${clientSecret}`);
