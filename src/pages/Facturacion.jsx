@@ -94,7 +94,7 @@ const Facturacion = () => {
     /** * IMPORTANTE: Esta URI debe ser EXACTAMENTE igual a la configurada en 
      * Intuit Developer Portal y en tu Edge Function (index.ts)
      */
-    const redirectUri = encodeURIComponent('http://localhost:5173/'); 
+    const redirectUri = encodeURIComponent('https://qbo-export-app.vercel.app'); 
     const state = `pma_${Math.random().toString(36).substring(7)}`;
 
     window.location.href = `https://appcenter.intuit.com/connect/oauth2?client_id=${clientId}&response_type=code&scope=com.intuit.quickbooks.accounting&redirect_uri=${redirectUri}&state=${state}`;
