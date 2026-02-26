@@ -8,48 +8,25 @@ const corsHeaders = {
 }
 
 serve(async (req: Request) => {
-  // 1. Manejo de Preflight (CORS)
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
-  }
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
   try {
     const { code, realmId } = await req.json()
-
-    // OBTENCIÓN DE CREDENCIALES
-    const clientId = Deno.env.get('QBO_CLIENT_ID');
-    const clientSecret = Deno.env.get('QBO_CLIENT_SECRET');
+    const clientId = Deno.env.get('QBO_CLIENT_ID')
+    const clientSecret = Deno.env.get('QBO_CLIENT_SECRET')
     
-    /**
-     * IMPORTANTE: Para desarrollo local con Vite, debe ser EXACTAMENTE:
-     * http://localhost:5173/
-     * Asegúrate de que esta URL también esté en el Intuit Developer Portal.
-     */
-    const redirectUri = 'http://localhost:5173/'; 
-
-    if (!clientId || !clientSecret) {
-      throw new Error("Faltan secretos QBO_CLIENT_ID o QBO_CLIENT_SECRET en Supabase");
-    }
-
-    // 2. VALIDACIÓN DEL USUARIO DE SUPABASE (Antes del intercambio de QBO)
-    // Esto asegura que si el token de Supabase falló, no desperdiciamos el 'code' de QBO
-    const supabaseAdmin = createClient(
+    // 1. Validar Usuario (Forma nativa de Supabase)
+    const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-    );
+      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+      { global: { headers: { Authorization: req.headers.get('Authorization')! } } }
+    )
 
-    const authHeaderRaw = req.headers.get('Authorization');
-    if (!authHeaderRaw) throw new Error("No se proporcionó token de sesión (Authorization header missing)");
-    
-    const userToken = authHeaderRaw.replace(/[Bb]earer\s+/, "");
-    const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(userToken);
+    const { data: { user }, error: authError } = await supabaseClient.auth.getUser()
+    if (authError || !user) throw new Error("Sesión inválida o expirada");
 
-    if (userError || !user) {
-      console.error("Error Auth Supabase:", userError);
-      throw new Error("La sesión de usuario expiró o es inválida. Re-inicia sesión en la app.");
-    }
-
-    // 3. Intercambio de código por Token con QuickBooks
+    // 2. Intercambio de Tokens con QBO
+    const redirectUri = 'https://qbo-export-app.vercel.app/'; 
     const basicAuth = btoa(`${clientId}:${clientSecret}`);
     
     const tokenResponse = await fetch('https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer', {
@@ -57,53 +34,40 @@ serve(async (req: Request) => {
       headers: {
         'Authorization': `Basic ${basicAuth}`,
         'Content-Type': 'application/x-www-form-urlencoded',
-        'Accept': 'application/json',
       },
       body: new URLSearchParams({
         grant_type: 'authorization_code',
-        code: code,
+        code,
         redirect_uri: redirectUri,
       }),
     });
 
     const tokenData = await tokenResponse.json();
+    if (!tokenResponse.ok) throw new Error(tokenData.error_description || "Error en QBO");
 
-    if (!tokenResponse.ok) {
-      console.error("Error de QuickBooks API:", tokenData);
-      throw new Error(`QuickBooks rechazó el intercambio: ${tokenData.error_description || tokenData.error}`);
-    }
+    // 3. Guardar usando Service Role (Admin) para evitar RLS
+    const supabaseAdmin = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+    )
 
-    // 4. Guardar los tokens en la base de datos
-    const { error: dbError } = await supabaseAdmin
-      .from('qbo_tokens')
-      .upsert({
-        user_id: user.id,
-        access_token: tokenData.access_token,
-        refresh_token: tokenData.refresh_token,
-        realm_id: realmId,
-        expires_at: new Date(Date.now() + tokenData.expires_in * 1000).toISOString(),
-        updated_at: new Date().toISOString()
-      }, { onConflict: 'user_id' });
+    await supabaseAdmin.from('qbo_tokens').upsert({
+      user_id: user.id,
+      access_token: tokenData.access_token,
+      refresh_token: tokenData.refresh_token,
+      realm_id: realmId,
+      expires_at: new Date(Date.now() + tokenData.expires_in * 1000).toISOString()
+    });
 
-    if (dbError) {
-      console.error("Error DB Supabase:", dbError);
-      throw new Error("Error al guardar tokens en la base de datos");
-    }
-
-    return new Response(JSON.stringify({ 
-      message: "Conectado con éxito",
-      realmId: realmId 
-    }), {
+    return new Response(JSON.stringify({ success: true }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 200,
     });
 
   } catch (error: any) {
-    console.error("Error en Edge Function:", error.message);
-    
     return new Response(JSON.stringify({ error: error.message }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      status: 400,
+      status: 401, // Aquí es donde ves el 401 en la consola
     });
   }
 })
