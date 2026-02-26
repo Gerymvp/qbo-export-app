@@ -16,12 +16,18 @@ serve(async (req: Request) => {
   try {
     const { code, realmId } = await req.json();
 
-    // CREDENCIALES (Usa variables de entorno para producción)
-    const clientId = 'ABK9ko4wbz4pMUSYqrcqqlHIKKeqXXlJ6AODNyy9Khl6X9td6V';
-    const clientSecret = 'nAIFl0ICdoKrOPECt9sW6uXATxsjplOzuFq30r8O'; 
+    // OBTENCIÓN SEGURA DE CREDENCIALES
+    // Debes configurar estos secretos en Supabase usando:
+    // supabase secrets set QBO_CLIENT_ID=tu_id QBO_CLIENT_SECRET=tu_secreto
+    const clientId = Deno.env.get('QBO_CLIENT_ID');
+    const clientSecret = Deno.env.get('QBO_CLIENT_SECRET');
     
-    // Debe coincidir EXACTAMENTE con lo configurado en Intuit y el frontend
+    // IMPORTANTE: Sin barra final para coincidir con el portal de Intuit
     const redirectUri = 'https://qbo-export-app.vercel.app'; 
+
+    if (!clientId || !clientSecret) {
+      throw new Error("Las credenciales de QuickBooks (QBO_CLIENT_ID/SECRET) no están configuradas en Supabase.");
+    }
 
     // 2. Intercambio de código por Token
     const authHeader = btoa(`${clientId}:${clientSecret}`);
