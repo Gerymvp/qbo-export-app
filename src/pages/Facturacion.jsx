@@ -3,13 +3,11 @@ import { Mail } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useFacturacion } from '../hooks/useFacturacion';
 
-// Sub-componentes
 import F_Header from '../components/facturacion/F_Header';
 import F_EmptyState from '../components/facturacion/F_EmptyState';
 import ReviewTable from '../components/facturacion/F_ReviewTable';
 import InboxDrawer from '../components/facturacion/InboxDrawer';
 
-// Styles
 import '../styles/Facturacion/facturacion.css';
 
 const Facturacion = () => {
@@ -29,7 +27,6 @@ const Facturacion = () => {
     enviarAQuickBooks 
   } = useFacturacion();
 
-  // REFERENCIA PARA EVITAR DOBLE EJECUCIÓN
   const exchangeStarted = useRef(false);
 
   useEffect(() => {
@@ -42,51 +39,38 @@ const Facturacion = () => {
 
       const handleTokenExchange = async () => {
         try {
-          console.log("Intentando forzar intercambio de tokens para:", rId);
+          console.log("Iniciando intercambio para RealmID:", rId);
           
-          // 1. Validar sesión localmente
+          // Verificar sesión activa antes de la invocación
           const { data: { session }, error: sessionError } = await supabase.auth.getSession();
           
           if (sessionError || !session) {
-            console.error("Fallo de sesión:", sessionError);
-            throw new Error("No hay sesión activa. Por favor, re-autentícate.");
+            throw new Error("Sesión no activa. Por favor, inicia sesión de nuevo.");
           }
 
-          // 2. INVOCACIÓN FORZADA
-          // Pasamos el token explícitamente en el header estándar de Supabase
+          /**
+           * CAMBIO CLAVE PARA ELIMINAR EL 401:
+           * Eliminamos los headers manuales. El SDK de Supabase inyecta 
+           * automáticamente el Bearer token correcto si existe una sesión.
+           */
           const { data, error } = await supabase.functions.invoke('qbo-oauth-handler', {
-            body: { code, realmId: rId },
-            headers: {
-              Authorization: `Bearer ${session.access_token}`,
-              'x-client-info': 'supabase-js-force' 
-            }
+            body: { code, realmId: rId }
           });
 
-          if (error) {
-            console.error("Error devuelto por la Edge Function:", error);
-            throw error;
-          }
+          if (error) throw error;
 
-          console.log("✅ Intercambio exitoso en servidor:", data?.message);
+          // Limpiar parámetros de la URL inmediatamente tras el éxito
+          window.history.replaceState({}, document.title, window.location.origin + window.location.pathname);
 
-          // 3. Persistir estado localmente antes de limpiar
           localStorage.setItem('qbo_connected', 'true');
           localStorage.setItem('qbo_realmId', rId);
           
-          // 4. Limpieza de URL y recarga controlada
-          const cleanUrl = window.location.origin + window.location.pathname;
-          window.history.replaceState({}, document.title, cleanUrl);
-          
-          console.log("Recargando aplicación para aplicar cambios...");
+          console.log("Intercambio exitoso");
           window.location.reload(); 
-
         } catch (err) {
-          console.error("❌ Error crítico en OAuth:", err);
-          
-          // Limpiar URL incluso en error para evitar bucles de códigos expirados
+          console.error("Error en intercambio OAuth:", err);
           window.history.replaceState({}, document.title, window.location.pathname);
-          
-          alert(`Error de conexión: ${err.message || "La comunicación falló"}`);
+          alert(`Error: ${err.message}`);
           exchangeStarted.current = false;
         }
       };
@@ -97,6 +81,7 @@ const Facturacion = () => {
 
   const handleConnectQBO = () => {
     const clientId = 'ABHJF9iKHUtsgJwew9TtBQmoFjal8zRArUbW4DRFUXlTFLu5PQ';
+    // URI exacta registrada sin la barra final (/)
     const redirectUri = encodeURIComponent('https://qbo-export-app.vercel.app'); 
     const state = `pma_${Math.random().toString(36).substring(7)}`;
 
@@ -114,10 +99,7 @@ const Facturacion = () => {
 
   return (
     <div className="facturacion-container">
-      <button 
-        className="floating-inbox-btn" 
-        onClick={() => setIsDrawerOpen(true)}
-      >
+      <button className="floating-inbox-btn" onClick={() => setIsDrawerOpen(true)}>
         <Mail size={24} />
         {pendientes.length > 0 && <span className="notif-dot">{pendientes.length}</span>}
       </button>
@@ -126,16 +108,13 @@ const Facturacion = () => {
         isOpen={isDrawerOpen} 
         onClose={() => setIsDrawerOpen(false)}
         pendientes={pendientes}
-        onSelect={(f) => { 
-          processNewInvoice(f.xml_content, f.id); 
-          setIsDrawerOpen(false); 
-        }}
+        onSelect={(f) => { processNewInvoice(f.xml_content, f.id); setIsDrawerOpen(false); }}
         onDelete={async (id) => {
           const { error } = await supabase.from('facturas_pendientes').delete().eq('id', id);
           if (!error) fetchPendientes();
         }} 
         onDeleteAll={async () => {
-          if (window.confirm('¿Vaciar bandeja?')) {
+          if (window.confirm('¿Eliminar todas?')) {
             const { error } = await supabase.from('facturas_pendientes').delete().not('id', 'is', null);
             if (!error) fetchPendientes();
           }
