@@ -39,33 +39,30 @@ const Facturacion = () => {
 
       const handleTokenExchange = async () => {
         try {
-          console.log("Iniciando intercambio de tokens para:", rId);
+          console.log("Iniciando intercambio de tokens único...");
           
+          // 1. Obtener la sesión para verificar que existe
           const { data: { session }, error: sessionError } = await supabase.auth.getSession();
           
           if (sessionError || !session) {
-            throw new Error("No hay sesión activa. Reintenta el login.");
+            throw new Error("No se encontró una sesión de usuario activa.");
           }
 
-          // CAMBIO CRÍTICO: Eliminamos el header manual de Authorization
-          // Dejamos que el SDK maneje la autenticación interna de la Edge Function
+          // 2. INVOCACIÓN CORREGIDA
+          // Eliminamos el header manual 'Authorization' porque el SDK lo añade 
+          // automáticamente de forma correcta si no se lo pasamos mal nosotros.
           const { data, error } = await supabase.functions.invoke('qbo-oauth-handler', {
             body: { code, realmId: rId }
           });
 
-          if (error) {
-            // Si el error es 401 aquí, es un tema de configuración de Supabase
-            console.error("Detalle del error de la función:", error);
-            throw error;
-          }
+          if (error) throw error;
 
-          console.log("Éxito total en el servidor");
-
-          // Guardar estado y limpiar URL
+          // 3. Limpiar la URL y guardar estado
+          window.history.replaceState({}, document.title, window.location.origin + window.location.pathname);
           localStorage.setItem('qbo_connected', 'true');
           localStorage.setItem('qbo_realmId', rId);
-          window.history.replaceState({}, document.title, window.location.origin + window.location.pathname);
           
+          console.log("Intercambio exitoso");
           window.location.reload(); 
         } catch (err) {
           console.error("Error en intercambio OAuth:", err);
@@ -107,13 +104,16 @@ const Facturacion = () => {
         isOpen={isDrawerOpen} 
         onClose={() => setIsDrawerOpen(false)}
         pendientes={pendientes}
-        onSelect={(f) => { processNewInvoice(f.xml_content, f.id); setIsDrawerOpen(false); }}
+        onSelect={(f) => { 
+          processNewInvoice(f.xml_content, f.id); 
+          setIsDrawerOpen(false); 
+        }}
         onDelete={async (id) => {
           const { error } = await supabase.from('facturas_pendientes').delete().eq('id', id);
           if (!error) fetchPendientes();
         }} 
         onDeleteAll={async () => {
-          if (window.confirm('¿Eliminar todas?')) {
+          if (window.confirm('¿Deseas vaciar la bandeja?')) {
             const { error } = await supabase.from('facturas_pendientes').delete().not('id', 'is', null);
             if (!error) fetchPendientes();
           }
