@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react'; //
+import React, { useEffect, useRef } from 'react';
 import { Mail } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useFacturacion } from '../hooks/useFacturacion';
@@ -29,7 +29,7 @@ const Facturacion = () => {
     enviarAQuickBooks 
   } = useFacturacion();
 
-  // REFERENCIA PARA EVITAR DOBLE EJECUCIÓN (React Strict Mode)
+  // REFERENCIA PARA EVITAR DOBLE EJECUCIÓN (Fundamental para evitar quemar el código de QBO)
   const exchangeStarted = useRef(false);
 
   useEffect(() => {
@@ -40,7 +40,7 @@ const Facturacion = () => {
     if (code && rId && !exchangeStarted.current) {
       exchangeStarted.current = true;
 
-      // Limpiar la URL inmediatamente para evitar re-procesamientos al refrescar
+      // Limpiar la URL inmediatamente para evitar errores al refrescar la página
       window.history.replaceState({}, document.title, window.location.origin);
 
       const handleTokenExchange = async () => {
@@ -52,13 +52,15 @@ const Facturacion = () => {
 
           if (error) throw error;
 
-          // Guardar éxito y recargar para refrescar el estado de conexión
+          // Guardar estado de conexión exitosa
           localStorage.setItem('qbo_connected', 'true');
           localStorage.setItem('qbo_realmId', rId);
+          
+          // Recargar para que el hook useFacturacion detecte los nuevos tokens
           window.location.reload(); 
         } catch (err) {
           console.error("Error en intercambio OAuth:", err);
-          alert("Error de conexión: El código de QuickBooks ya expiró o es inválido. Intenta conectar de nuevo.");
+          alert("Error de conexión: El código de QuickBooks ya expiró o es inválido. Por favor, intenta conectar de nuevo.");
         }
       };
 
@@ -67,9 +69,10 @@ const Facturacion = () => {
   }, []);
 
   const handleConnectQBO = () => {
+    // IMPORTANTE: Asegúrate de que este Client ID sea el de tu entorno actual (Production/Sandbox)
     const clientId = 'ABHJF9iKHUtsgJwew9TtBQmoFjal8zRArUbW4DRFUXlTFLu5PQ';
     
-    // Debe coincidir EXACTAMENTE con el Redirect URI en Intuit (sin barra final si así se configuró)
+    // El redirectUri debe coincidir EXACTAMENTE con lo que pusiste en la Edge Function
     const redirectUri = encodeURIComponent(window.location.origin); 
     
     const state = `pma_${Math.random().toString(36).substring(7)}`;
@@ -97,7 +100,7 @@ const Facturacion = () => {
         isOpen={isDrawerOpen} 
         onClose={() => setIsDrawerOpen(false)}
         pendientes={pendientes}
-        onSelect={(f) => { processNewInvoice(f.xml_content); setIsDrawerOpen(false); }}
+        onSelect={(f) => { processNewInvoice(f.xml_content, f.id); setIsDrawerOpen(false); }}
         onDelete={async (id) => {
           await supabase.from('facturas_pendientes').delete().eq('id', id);
           fetchPendientes();
@@ -126,7 +129,11 @@ const Facturacion = () => {
         isConnected={isConnected} 
         realmId={realmId} 
         onConnect={handleConnectQBO} 
-        onLogout={() => { localStorage.clear(); window.location.reload(); }} 
+        onLogout={() => { 
+          localStorage.removeItem('qbo_connected');
+          localStorage.removeItem('qbo_realmId');
+          window.location.reload(); 
+        }} 
         onRefresh={fetchPendientes} 
       />
 
