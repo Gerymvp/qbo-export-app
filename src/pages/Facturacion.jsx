@@ -29,7 +29,7 @@ const Facturacion = () => {
     enviarAQuickBooks 
   } = useFacturacion();
 
-  // REFERENCIA PARA EVITAR DOBLE EJECUCIÓN (Fundamental para evitar quemar el código de QBO)
+  // REFERENCIA PARA EVITAR DOBLE EJECUCIÓN
   const exchangeStarted = useRef(false);
 
   useEffect(() => {
@@ -40,7 +40,7 @@ const Facturacion = () => {
     if (code && rId && !exchangeStarted.current) {
       exchangeStarted.current = true;
 
-      // Limpiar la URL inmediatamente para evitar errores al refrescar la página
+      // Limpiar la URL inmediatamente
       window.history.replaceState({}, document.title, window.location.origin);
 
       const handleTokenExchange = async () => {
@@ -69,11 +69,12 @@ const Facturacion = () => {
   }, []);
 
   const handleConnectQBO = () => {
-    // IMPORTANTE: Asegúrate de que este Client ID sea el de tu entorno actual (Production/Sandbox)
+    // Client ID de Producción
     const clientId = 'ABHJF9iKHUtsgJwew9TtBQmoFjal8zRArUbW4DRFUXlTFLu5PQ';
     
-    // El redirectUri debe coincidir EXACTAMENTE con lo que pusiste en la Edge Function
-    const redirectUri = encodeURIComponent(window.location.origin); 
+    // IMPORTANTE: Debe ser EXACTAMENTE igual a la configurada en Intuit y en la Edge Function
+    // Quitamos window.location.origin para evitar variaciones con "/" al final.
+    const redirectUri = encodeURIComponent('https://qbo-export-app.vercel.app'); 
     
     const state = `pma_${Math.random().toString(36).substring(7)}`;
 
