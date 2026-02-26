@@ -12,8 +12,8 @@ serve(async (req: Request) => {
 
   try {
     const { code, realmId } = await req.json()
-    const clientId = Deno.env.get('QBO_CLIENT_ID')
-    const clientSecret = Deno.env.get('QBO_CLIENT_SECRET')
+    const clientId = Deno.env.get('INTUIT_CLIENT_ID')
+    const clientSecret = Deno.env.get('INTUIT_CLIENT_SECRET')
     
     // 1. Validar Usuario (Forma nativa de Supabase)
     const supabaseClient = createClient(
@@ -26,7 +26,7 @@ serve(async (req: Request) => {
     if (authError || !user) throw new Error("Sesión inválida o expirada");
 
     // 2. Intercambio de Tokens con QBO
-    const redirectUri = 'https://qbo-export-app.vercel.app/'; 
+    const redirectUri = 'https://qbo-export-app.vercel.app'; 
     const basicAuth = btoa(`${clientId}:${clientSecret}`);
     
     const tokenResponse = await fetch('https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer', {
