@@ -8,26 +8,31 @@ const corsHeaders = {
 }
 
 serve(async (req) => {
-  // 1. Manejo de Preflight (CORS) - ESTO ES LO QUE ESTÁ FALLANDO SEGÚN TU CONSOLA
+  // 1. Manejo de Preflight (CORS) - Vital para navegadores modernos
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
 
   try {
-    const { code, realmId } = await req.json()
+    const { code, realmId } = await req.json();
 
-    // Datos de tu Intuit Developer Portal (Cámbialos por tus credenciales reales)
+    // CREDENCIALES
     const clientId = 'ABK9ko4wbz4pMUSYqrcqqlHIKKeqXXlJ6AODNyy9Khl6X9td6V';
-    const clientSecret = 'nAIFl0ICdoKrOPECt9sW6uXATxsjplOzuFq30r8O'; // <--- ¡PON TU SECRET AQUÍ!
-    const redirectUri = 'https://qbo-export-app.vercel.app/';
+    const clientSecret = 'nAIFl0ICdoKrOPECt9sW6uXATxsjplOzuFq30r8O'; 
+    
+    // IMPORTANTE: Esta URI debe ser IDÉNTICA a la que envías desde el frontend.
+    // Si en el frontend usas window.location.origin (sin /), aquí debe ser igual.
+    const redirectUri = 'https://qbo-export-app.vercel.app'; 
 
     // 2. Intercambiar código por Token con QuickBooks
     const authHeader = btoa(`${clientId}:${clientSecret}`);
+    
     const tokenResponse = await fetch('https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer', {
       method: 'POST',
       headers: {
         'Authorization': `Basic ${authHeader}`,
         'Content-Type': 'application/x-www-form-urlencoded',
+        'Accept': 'application/json',
       },
       body: new URLSearchParams({
         grant_type: 'authorization_code',
@@ -37,20 +42,27 @@ serve(async (req) => {
     });
 
     const tokenData = await tokenResponse.json();
-    if (!tokenResponse.ok) throw new Error(JSON.stringify(tokenData));
 
-    // 3. Guardar en Supabase
-const supabase = createClient(
-  Deno.env.get('SUPABASE_URL') ?? '',
-  Deno.env.get('SERVICE_ROLE_KEY') ?? Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-);
+    // LOG DE DEPURACIÓN: Esto aparecerá en tus logs de Supabase si falla
+    if (!tokenResponse.ok) {
+      console.error("Error de QuickBooks:", tokenData);
+      throw new Error(`QuickBooks Error: ${tokenData.error_description || tokenData.error || 'Unknown error'}`);
+    }
 
-    // Obtener el ID del usuario desde el header de autorización
-    const userAuth = req.headers.get('Authorization')?.replace('Bearer ', '');
-    const { data: { user } } = await supabase.auth.getUser(userAuth);
+    // 3. Inicializar Supabase con Service Role para saltar políticas RLS si es necesario
+    const supabase = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+    );
 
-    if (!user) throw new Error("Usuario no autenticado");
+    // Obtener el usuario autenticado
+    const authHeaderRaw = req.headers.get('Authorization');
+    if (!authHeaderRaw) throw new Error("No se proporcionó token de autorización");
+    
+    const { data: { user }, error: userError } = await supabase.auth.getUser(authHeaderRaw.replace('Bearer ', ''));
+    if (userError || !user) throw new Error("Usuario no autenticado o sesión expirada");
 
+    // 4. Guardar o actualizar tokens (UPSERT)
     const { error: dbError } = await supabase
       .from('qbo_tokens')
       .upsert({
@@ -58,20 +70,23 @@ const supabase = createClient(
         access_token: tokenData.access_token,
         refresh_token: tokenData.refresh_token,
         realm_id: realmId,
+        // Calculamos la fecha de expiración real
         expires_at: new Date(Date.now() + tokenData.expires_in * 1000).toISOString(),
-      });
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'user_id' }); // Asegura que solo haya una conexión por usuario
 
     if (dbError) throw dbError;
 
-    return new Response(JSON.stringify({ message: "Conectado con éxito" }), {
+    return new Response(JSON.stringify({ message: "Conexión exitosa" }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 200,
     });
 
   } catch (error) {
+    console.error("Error en la función:", error.message);
     return new Response(JSON.stringify({ error: error.message }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 400,
     });
   }
-}) 
+})
