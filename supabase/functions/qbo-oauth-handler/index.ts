@@ -8,7 +8,7 @@ const corsHeaders = {
 }
 
 serve(async (req: Request) => {
-  // 1. Manejo de Preflight (CORS)
+  // 1. Manejo de Preflight (CORS) obligatorio para Edge Functions
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
@@ -16,20 +16,19 @@ serve(async (req: Request) => {
   try {
     const { code, realmId } = await req.json();
 
-    // OBTENCIÓN SEGURA DE CREDENCIALES
-    // Debes configurar estos secretos en Supabase usando:
-    // supabase secrets set QBO_CLIENT_ID=tu_id QBO_CLIENT_SECRET=tu_secreto
-    const clientId = Deno.env.get('QBO_CLIENT_ID');
-    const clientSecret = Deno.env.get('QBO_CLIENT_SECRET');
+    // OBTENCIÓN DE CREDENCIALES CON FALLBACK
+    // Esto asegura que funcione aunque borres las duplicadas o cambies el nombre
+    const clientId = Deno.env.get('QBO_CLIENT_ID') || Deno.env.get('INTUIT_CLIENT_ID');
+    const clientSecret = Deno.env.get('QBO_CLIENT_SECRET') || Deno.env.get('INTUIT_CLIENT_SECRET');
     
-    // IMPORTANTE: Sin barra final para coincidir con el portal de Intuit
+    // El redirect URI debe ser idéntico al configurado en el Dashboard de Intuit
     const redirectUri = 'https://qbo-export-app.vercel.app'; 
 
     if (!clientId || !clientSecret) {
-      throw new Error("Las credenciales de QuickBooks (QBO_CLIENT_ID/SECRET) no están configuradas en Supabase.");
+      throw new Error("Credenciales de QuickBooks no encontradas. Verifica los Secretos en Supabase.");
     }
 
-    // 2. Intercambio de código por Token
+    // 2. Intercambio de código por Token (OAuth2)
     const authHeader = btoa(`${clientId}:${clientSecret}`);
     
     const tokenResponse = await fetch('https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer', {
@@ -49,38 +48,49 @@ serve(async (req: Request) => {
     const tokenData = await tokenResponse.json();
 
     if (!tokenResponse.ok) {
-      console.error("Error detallado de QBO:", tokenData);
+      console.error("Error de Intuit API:", tokenData);
       throw new Error(tokenData.error_description || tokenData.error || 'Fallo en intercambio de tokens');
     }
 
-    // 3. Inicializar Supabase
-    const supabase = createClient(
+    // 3. Inicializar Supabase con SERVICE ROLE para gestión de base de datos
+    const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    // Validar usuario
+    // VALIDACIÓN DE USUARIO (Previene el error 401)
     const authHeaderRaw = req.headers.get('Authorization');
-    if (!authHeaderRaw) throw new Error("Falta header de autorización");
+    if (!authHeaderRaw) throw new Error("Falta header de autorización en la petición");
     
-    const { data: { user }, error: userError } = await supabase.auth.getUser(authHeaderRaw.replace('Bearer ', ''));
-    if (userError || !user) throw new Error("Sesión de usuario inválida");
+    // Limpieza segura del token Bearer
+    const token = authHeaderRaw.replace('Bearer ', '').trim();
+    
+    const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(token);
+    
+    if (userError || !user) {
+      console.error("Error validando usuario:", userError);
+      throw new Error("Sesión de usuario inválida o expirada");
+    }
 
-    // 4. Guardar tokens
-    const { error: dbError } = await supabase
+    // 4. Guardar o actualizar tokens en la base de datos
+    const { error: dbError } = await supabaseAdmin
       .from('qbo_tokens')
       .upsert({
         user_id: user.id,
         access_token: tokenData.access_token,
         refresh_token: tokenData.refresh_token,
         realm_id: realmId,
+        // Calculamos la expiración exacta
         expires_at: new Date(Date.now() + tokenData.expires_in * 1000).toISOString(),
         updated_at: new Date().toISOString(),
       }, { onConflict: 'user_id' });
 
     if (dbError) throw dbError;
 
-    return new Response(JSON.stringify({ message: "Conectado" }), {
+    return new Response(JSON.stringify({ 
+      message: "Conexión con QuickBooks exitosa",
+      realmId: realmId 
+    }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 200,
     });
@@ -91,7 +101,7 @@ serve(async (req: Request) => {
     
     return new Response(JSON.stringify({ error: errorMessage }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      status: 400,
+      status: 400, // Error controlado
     });
   }
 })
