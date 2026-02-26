@@ -3,13 +3,11 @@ import { Mail } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useFacturacion } from '../hooks/useFacturacion';
 
-// Sub-componentes
 import F_Header from '../components/facturacion/F_Header';
 import F_EmptyState from '../components/facturacion/F_EmptyState';
 import ReviewTable from '../components/facturacion/F_ReviewTable';
 import InboxDrawer from '../components/facturacion/InboxDrawer';
 
-// Styles
 import '../styles/Facturacion/facturacion.css';
 
 const Facturacion = () => {
@@ -29,7 +27,7 @@ const Facturacion = () => {
     enviarAQuickBooks 
   } = useFacturacion();
 
-  // REFERENCIA PARA EVITAR DOBLE EJECUCIÓN (Strict Mode)
+  // REFERENCIA PARA EVITAR QUE REACT DISPARE EL INTERCAMBIO 2 VECES
   const exchangeStarted = useRef(false);
 
   useEffect(() => {
@@ -42,45 +40,35 @@ const Facturacion = () => {
 
       const handleTokenExchange = async () => {
         try {
-          console.log("Iniciando intercambio de tokens único...");
+          console.log("Iniciando intercambio de tokens único para producción...");
           
-          // 1. Obtener la sesión para asegurar que el cliente de Supabase esté autenticado
+          // 1. Obtener sesión activa para garantizar que el cliente esté autenticado
           const { data: { session }, error: sessionError } = await supabase.auth.getSession();
           
           if (sessionError || !session) {
-            throw new Error("No se encontró una sesión activa. Por favor, inicia sesión.");
+            throw new Error("No hay sesión activa. Por favor, inicia sesión de nuevo.");
           }
 
-          // 2. INVOCACIÓN CORREGIDA (FORZADA)
-          // NO pasamos headers manuales de Authorization. 
-          // El SDK de Supabase los inyecta automáticamente de forma correcta.
+          // 2. INVOCACIÓN FORZADA
+          // Quitamos los headers manuales. El SDK inyecta el Bearer token automáticamente.
+          // Si esto falla con 401, el problema es la opción "Verify JWT" en el Dashboard de Supabase.
           const { data, error } = await supabase.functions.invoke('qbo-oauth-handler', {
             body: { code, realmId: rId }
           });
 
-          if (error) {
-            console.error("Error devuelto por Supabase:", error);
-            throw error;
-          }
+          if (error) throw error;
 
-          // 3. Limpiar la URL inmediatamente tras el éxito
+          // 3. Limpiar URL y guardar estado exitoso
           window.history.replaceState({}, document.title, window.location.origin + window.location.pathname);
-
-          // 4. Guardar estado de conexión exitosa
           localStorage.setItem('qbo_connected', 'true');
           localStorage.setItem('qbo_realmId', rId);
           
-          console.log("✅ Intercambio exitoso");
-          
-          // Recargar para que useFacturacion detecte los cambios
+          console.log("Intercambio exitoso en servidor");
           window.location.reload(); 
         } catch (err) {
-          console.error("❌ Error en intercambio OAuth:", err);
-          
-          // Limpiar URL tras fallo para evitar bucles con códigos expirados
+          console.error("Error en intercambio OAuth:", err);
           window.history.replaceState({}, document.title, window.location.pathname);
-          
-          alert(`Error de conexión: ${err.message || "El código de QuickBooks ya expiró."}`);
+          alert(`Error de conexión: ${err.message}`);
           exchangeStarted.current = false;
         }
       };
@@ -91,6 +79,7 @@ const Facturacion = () => {
 
   const handleConnectQBO = () => {
     const clientId = 'ABHJF9iKHUtsgJwew9TtBQmoFjal8zRArUbW4DRFUXlTFLu5PQ';
+    // URL DE PRODUCCIÓN (Asegúrate que coincida con Intuit Developer Portal)
     const redirectUri = encodeURIComponent('https://qbo-export-app.vercel.app'); 
     const state = `pma_${Math.random().toString(36).substring(7)}`;
 
@@ -108,11 +97,7 @@ const Facturacion = () => {
 
   return (
     <div className="facturacion-container">
-      <button 
-        className="floating-inbox-btn" 
-        onClick={() => setIsDrawerOpen(true)}
-        title="Bandeja de facturas pendientes"
-      >
+      <button className="floating-inbox-btn" onClick={() => setIsDrawerOpen(true)}>
         <Mail size={24} />
         {pendientes.length > 0 && <span className="notif-dot">{pendientes.length}</span>}
       </button>
@@ -121,16 +106,13 @@ const Facturacion = () => {
         isOpen={isDrawerOpen} 
         onClose={() => setIsDrawerOpen(false)}
         pendientes={pendientes}
-        onSelect={(f) => { 
-          processNewInvoice(f.xml_content, f.id); 
-          setIsDrawerOpen(false); 
-        }}
+        onSelect={(f) => { processNewInvoice(f.xml_content, f.id); setIsDrawerOpen(false); }}
         onDelete={async (id) => {
           const { error } = await supabase.from('facturas_pendientes').delete().eq('id', id);
           if (!error) fetchPendientes();
         }} 
         onDeleteAll={async () => {
-          if (window.confirm('¿Eliminar todas las facturas?')) {
+          if (window.confirm('¿Vaciar bandeja?')) {
             const { error } = await supabase.from('facturas_pendientes').delete().not('id', 'is', null);
             if (!error) fetchPendientes();
           }
