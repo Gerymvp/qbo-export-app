@@ -40,9 +40,6 @@ const Facturacion = () => {
     if (code && rId && !exchangeStarted.current) {
       exchangeStarted.current = true;
 
-      // Limpiar la URL inmediatamente para evitar re-ejecuciones al recargar
-      window.history.replaceState({}, document.title, window.location.origin + window.location.pathname);
-
       const handleTokenExchange = async () => {
         try {
           console.log("Iniciando intercambio de tokens único...");
@@ -64,7 +61,10 @@ const Facturacion = () => {
 
           if (error) throw error;
 
-          // 3. Guardar estado de conexión exitosa en persistencia local
+          // 3. Limpiar la URL inmediatamente tras el éxito
+          window.history.replaceState({}, document.title, window.location.origin + window.location.pathname);
+
+          // 4. Guardar estado de conexión exitosa
           localStorage.setItem('qbo_connected', 'true');
           localStorage.setItem('qbo_realmId', rId);
           
@@ -74,8 +74,12 @@ const Facturacion = () => {
           window.location.reload(); 
         } catch (err) {
           console.error("Error en intercambio OAuth:", err);
+          
+          // --- CORRECCIÓN SOLICITADA: LIMPIAR URL TRAS FALLO ---
+          window.history.replaceState({}, document.title, window.location.pathname);
+          
           alert(`Error de conexión: ${err.message || "El código de QuickBooks ya expiró."}`);
-          exchangeStarted.current = false; // Permitir reintento si falla
+          exchangeStarted.current = false; // Permitir reintento si el usuario vuelve a iniciar el flujo
         }
       };
 
@@ -84,11 +88,13 @@ const Facturacion = () => {
   }, []);
 
   const handleConnectQBO = () => {
-    // Client ID de Producción
+    // IMPORTANTE: Client ID debe ser el que corresponda a tu entorno (Sandbox o Prod)
     const clientId = 'ABHJF9iKHUtsgJwew9TtBQmoFjal8zRArUbW4DRFUXlTFLu5PQ';
     
-    // IMPORTANTE: Debe coincidir EXACTAMENTE con el Dashboard de Intuit
-    const redirectUri = encodeURIComponent('https://qbo-export-app.vercel.app'); 
+    /** * IMPORTANTE: Esta URI debe ser EXACTAMENTE igual a la configurada en 
+     * Intuit Developer Portal y en tu Edge Function (index.ts)
+     */
+    const redirectUri = encodeURIComponent('http://localhost:5173/'); 
     const state = `pma_${Math.random().toString(36).substring(7)}`;
 
     window.location.href = `https://appcenter.intuit.com/connect/oauth2?client_id=${clientId}&response_type=code&scope=com.intuit.quickbooks.accounting&redirect_uri=${redirectUri}&state=${state}`;

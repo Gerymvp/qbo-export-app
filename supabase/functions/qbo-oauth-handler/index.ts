@@ -8,7 +8,7 @@ const corsHeaders = {
 }
 
 serve(async (req: Request) => {
-  // 1. Manejo de Preflight (CORS) obligatorio
+  // 1. Manejo de Preflight (CORS)
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
@@ -16,24 +16,46 @@ serve(async (req: Request) => {
   try {
     const { code, realmId } = await req.json()
 
-    // OBTENCIÓN DE CREDENCIALES DESDE VARIABLES DE ENTORNO
+    // OBTENCIÓN DE CREDENCIALES
     const clientId = Deno.env.get('QBO_CLIENT_ID');
     const clientSecret = Deno.env.get('QBO_CLIENT_SECRET');
     
-    // IMPORTANTE: Esta URL debe ser idéntica a la configurada en Intuit Developer Portal
-    const redirectUri = 'https://qbo-export-app.vercel.app'; 
+    /**
+     * IMPORTANTE: Para desarrollo local con Vite, debe ser EXACTAMENTE:
+     * http://localhost:5173/
+     * Asegúrate de que esta URL también esté en el Intuit Developer Portal.
+     */
+    const redirectUri = 'http://localhost:5173/'; 
 
     if (!clientId || !clientSecret) {
-      throw new Error("Faltan credenciales QBO_CLIENT_ID o QBO_CLIENT_SECRET en los Secretos de Supabase");
+      throw new Error("Faltan secretos QBO_CLIENT_ID o QBO_CLIENT_SECRET en Supabase");
     }
 
-    // 2. Intercambio de código por Token con QuickBooks (OAuth2)
-    const authHeader = btoa(`${clientId}:${clientSecret}`);
+    // 2. VALIDACIÓN DEL USUARIO DE SUPABASE (Antes del intercambio de QBO)
+    // Esto asegura que si el token de Supabase falló, no desperdiciamos el 'code' de QBO
+    const supabaseAdmin = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+    );
+
+    const authHeaderRaw = req.headers.get('Authorization');
+    if (!authHeaderRaw) throw new Error("No se proporcionó token de sesión (Authorization header missing)");
+    
+    const userToken = authHeaderRaw.replace(/[Bb]earer\s+/, "");
+    const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(userToken);
+
+    if (userError || !user) {
+      console.error("Error Auth Supabase:", userError);
+      throw new Error("La sesión de usuario expiró o es inválida. Re-inicia sesión en la app.");
+    }
+
+    // 3. Intercambio de código por Token con QuickBooks
+    const basicAuth = btoa(`${clientId}:${clientSecret}`);
     
     const tokenResponse = await fetch('https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer', {
       method: 'POST',
       headers: {
-        'Authorization': `Basic ${authHeader}`,
+        'Authorization': `Basic ${basicAuth}`,
         'Content-Type': 'application/x-www-form-urlencoded',
         'Accept': 'application/json',
       },
@@ -48,33 +70,10 @@ serve(async (req: Request) => {
 
     if (!tokenResponse.ok) {
       console.error("Error de QuickBooks API:", tokenData);
-      // El error 401 suele venir de aquí si el clientSecret tiene espacios o el redirectUri no coincide
-      throw new Error(`Error en QuickBooks: ${tokenData.error_description || tokenData.error}`);
+      throw new Error(`QuickBooks rechazó el intercambio: ${tokenData.error_description || tokenData.error}`);
     }
 
-    // 3. Inicializar Supabase con SERVICE ROLE para saltar RLS al guardar el token
-    const supabaseAdmin = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? Deno.env.get('SERVICE_ROLE_KEY') ?? ''
-    );
-
-    // 4. VALIDACIÓN ROBUSTA DEL USUARIO (Previene el 401 del lado de Supabase)
-    const authHeaderRaw = req.headers.get('Authorization');
-    if (!authHeaderRaw) throw new Error("No se proporcionó token de autorización");
-    
-    // Limpieza mejorada: extrae el token sin importar si 'Bearer' viene con mayúsculas o espacios extra
-    const userToken = authHeaderRaw.split(" ").pop();
-    
-    if (!userToken) throw new Error("Formato de token inválido");
-
-    const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(userToken);
-
-    if (userError || !user) {
-      console.error("Error validando usuario:", userError);
-      throw new Error("Sesión de usuario inválida en Supabase");
-    }
-
-    // 5. Guardar o actualizar los tokens en la tabla 'qbo_tokens'
+    // 4. Guardar los tokens en la base de datos
     const { error: dbError } = await supabaseAdmin
       .from('qbo_tokens')
       .upsert({
@@ -86,7 +85,10 @@ serve(async (req: Request) => {
         updated_at: new Date().toISOString()
       }, { onConflict: 'user_id' });
 
-    if (dbError) throw dbError;
+    if (dbError) {
+      console.error("Error DB Supabase:", dbError);
+      throw new Error("Error al guardar tokens en la base de datos");
+    }
 
     return new Response(JSON.stringify({ 
       message: "Conectado con éxito",
@@ -97,11 +99,11 @@ serve(async (req: Request) => {
     });
 
   } catch (error: any) {
-    console.error("Error detectado en la función:", error.message);
+    console.error("Error en Edge Function:", error.message);
     
     return new Response(JSON.stringify({ error: error.message }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      status: 400, // Usamos 400 para errores de lógica/intercambio
+      status: 400,
     });
   }
 })
