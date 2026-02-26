@@ -32,7 +32,7 @@ const Facturacion = () => {
 
   // Handlers locales para la interfaz
   const handleConnectQBO = () => {
-    const clientId = 'ABK9ko4wbz4pMUSYqrcqqlHIKKeqXXlJ6AODNyy9Khl6X9td6V';
+    const clientId = 'ABHJF9iKHUtsgJwew9TtBQmoFjal8zRArUbW4DRFUXlTFLu5PQ';
     const redirectUri = encodeURIComponent('http://localhost:5173/'); 
     window.location.href = `https://appcenter.intuit.com/connect/oauth2?client_id=${clientId}&response_type=code&scope=com.intuit.quickbooks.accounting&redirect_uri=${redirectUri}&state=pma_${Math.random().toString(36).substring(7)}`;
   };
@@ -53,6 +53,9 @@ const Facturacion = () => {
         {pendientes.length > 0 && <span className="notif-dot">{pendientes.length}</span>}
       </button>
 
+      {/* CORRECCIÓN: Aseguramos que onDeleteAll se pase como prop 
+          para que coincida con la desestructuración en InboxDrawer.jsx 
+      */}
       <InboxDrawer 
         isOpen={isDrawerOpen} 
         onClose={() => setIsDrawerOpen(false)}
@@ -62,7 +65,27 @@ const Facturacion = () => {
           await supabase.from('facturas_pendientes').delete().eq('id', id);
           fetchPendientes();
         }} 
-      />
+        onDeleteAll={async () => {
+            if (window.confirm('¿Estás seguro de que deseas eliminar TODAS las facturas de la bandeja?')) {
+              try {
+                // Opción A: Eliminar usando un filtro que siempre sea verdadero para todos los registros
+                const { error } = await supabase
+                  .from('facturas_pendientes')
+                  .delete()
+                  .not('id', 'is', null); // Esto selecciona todos los registros que tengan un ID
+
+                if (error) throw error;
+                
+                // Refrescar la lista local inmediatamente
+                await fetchPendientes();
+                alert('Bandeja vaciada con éxito');
+              } catch (error) {
+                console.error("Error al eliminar facturas:", error.message);
+                alert('No se pudieron eliminar las facturas: ' + error.message);
+              }
+            }
+          }}
+        />
 
       <F_Header 
         isConnected={isConnected} 
@@ -79,7 +102,6 @@ const Facturacion = () => {
             qboAccounts={qboAccounts}
             qboVendors={qboVendors}
             onUpdateItem={handleUpdateItem}
-            // --- PASANDO LA FUNCIÓN DEL HOOK AL COMPONENTE ---
             onSendToQBO={enviarAQuickBooks} 
             onClearTable={() => setInvoiceData(null)}
           />

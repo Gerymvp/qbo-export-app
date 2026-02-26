@@ -74,4 +74,4 @@ const supabase = createClient(
       status: 400,
     });
   }
-})
+}) 

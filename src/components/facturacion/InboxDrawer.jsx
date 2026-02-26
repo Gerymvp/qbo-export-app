@@ -2,7 +2,8 @@ import React from 'react';
 import { Mail, X, ChevronRight, Clock, Trash2 } from 'lucide-react';
 import '../../styles/Facturacion/InboxDrawer.css';
 
-const InboxDrawer = ({ isOpen, onClose, pendientes, onSelect, onDelete }) => {
+// Se recibe onDeleteAll como prop para manejar la eliminación masiva
+const InboxDrawer = ({ isOpen, onClose, pendientes, onSelect, onDelete, onDeleteAll }) => {
   return (
     <>
       {isOpen && <div className="drawer-overlay" onClick={onClose} />}
@@ -20,8 +21,32 @@ const InboxDrawer = ({ isOpen, onClose, pendientes, onSelect, onDelete }) => {
         </div>
 
         <div className="drawer-content">
-          <div className="drawer-info">
+          <div className="drawer-info" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <small>Facturas pendientes de procesar</small>
+            
+            {/* Botón para eliminar todo - Se agrega stopPropagation */}
+            {pendientes.length > 0 && (
+              <button 
+                onClick={(e) => {
+                  e.stopPropagation(); // Evita que el click afecte a otros elementos
+                  onDeleteAll();
+                }}
+                className="btn-link-danger" 
+                style={{ 
+                  background: 'none', 
+                  border: 'none', 
+                  color: '#ef4444', 
+                  fontSize: '12px', 
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  padding: '4px 8px'
+                }}
+              >
+                <Trash2 size={14} /> Vaciar bandeja
+              </button>
+            )}
           </div>
           
           <div className="inbox-scroll-area">
@@ -41,8 +66,9 @@ const InboxDrawer = ({ isOpen, onClose, pendientes, onSelect, onDelete }) => {
                     <div className="item-actions">
                       <button 
                         className="btn btn-danger" 
+                        style={{ padding: '5px', height: 'auto' }}
                         onClick={(e) => {
-                          e.stopPropagation(); 
+                          e.stopPropagation(); // Evita que se dispare el onSelect del padre
                           if(window.confirm('¿Eliminar esta factura?')) onDelete(f.id);
                         }}
                       >
