@@ -34,11 +34,13 @@ const Facturacion = () => {
 const handleConnectQBO = () => {
   const clientId = 'ABHJF9iKHUtsgJwew9TtBQmoFjal8zRArUbW4DRFUXlTFLu5PQ';
   
-  // USA UNA URL FIJA QUE COINCIDA CON EL PANEL DE INTUIT
-  // Asegúrate de que esta URL sea EXACTAMENTE la que tienes en la captura de pantalla
-  const redirectUriStr = 'https://qbo-export-app.vercel.app/'; 
-  const redirectUri = encodeURIComponent(redirectUriStr); 
+  // Detecta si estás en la URL corta o en la larga de Vercel dinámicamente
+  // Agregamos la '/' al final para que coincida exactamente con lo que tienes en Intuit
+  const currentOrigin = window.location.origin.endsWith('/') 
+    ? window.location.origin 
+    : `${window.location.origin}/`;
 
+  const redirectUri = encodeURIComponent(currentOrigin); 
   const state = `pma_${Math.random().toString(36).substring(7)}`;
 
   window.location.href = `https://appcenter.intuit.com/connect/oauth2?client_id=${clientId}&response_type=code&scope=com.intuit.quickbooks.accounting&redirect_uri=${redirectUri}&state=${state}`;
