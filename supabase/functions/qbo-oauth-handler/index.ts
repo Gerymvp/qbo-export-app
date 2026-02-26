@@ -7,7 +7,8 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 }
 
-serve(async (req) => {
+serve(async (req: Request) => {
+  // 1. Manejo de Preflight (CORS) obligatorio
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
@@ -15,55 +16,66 @@ serve(async (req) => {
   try {
     const { code, realmId } = await req.json()
 
-    // --- CAMBIO 1: USAR VARIABLES DE ENTORNO SIEMPRE ---
+    // OBTENCIÓN DE CREDENCIALES DESDE VARIABLES DE ENTORNO
     const clientId = Deno.env.get('QBO_CLIENT_ID');
     const clientSecret = Deno.env.get('QBO_CLIENT_SECRET');
     
-    // --- CAMBIO 2: LA URL DE PRODUCCIÓN ---
+    // IMPORTANTE: Esta URL debe ser idéntica a la configurada en Intuit Developer Portal
     const redirectUri = 'https://qbo-export-app.vercel.app'; 
 
     if (!clientId || !clientSecret) {
-      throw new Error("Faltan credenciales en los Secretos de Supabase");
+      throw new Error("Faltan credenciales QBO_CLIENT_ID o QBO_CLIENT_SECRET en los Secretos de Supabase");
     }
 
+    // 2. Intercambio de código por Token con QuickBooks (OAuth2)
     const authHeader = btoa(`${clientId}:${clientSecret}`);
     
-    // Intercambio con QuickBooks
     const tokenResponse = await fetch('https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer', {
       method: 'POST',
       headers: {
         'Authorization': `Basic ${authHeader}`,
         'Content-Type': 'application/x-www-form-urlencoded',
+        'Accept': 'application/json',
       },
       body: new URLSearchParams({
         grant_type: 'authorization_code',
         code: code,
-        redirect_uri: redirectUri, // Debe ser idéntica a la de Intuit
+        redirect_uri: redirectUri,
       }),
     });
 
     const tokenData = await tokenResponse.json();
+
     if (!tokenResponse.ok) {
-      console.error("Error de QuickBooks:", tokenData);
-      throw new Error(`QuickBooks Error: ${tokenData.error_description || tokenData.error}`);
+      console.error("Error de QuickBooks API:", tokenData);
+      // El error 401 suele venir de aquí si el clientSecret tiene espacios o el redirectUri no coincide
+      throw new Error(`Error en QuickBooks: ${tokenData.error_description || tokenData.error}`);
     }
 
-    // 3. Guardar en Supabase usando SERVICE ROLE
-    const supabase = createClient(
+    // 3. Inicializar Supabase con SERVICE ROLE para saltar RLS al guardar el token
+    const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? Deno.env.get('SERVICE_ROLE_KEY') ?? ''
     );
 
-    // --- CAMBIO 3: VALIDACIÓN ROBUSTA DEL USUARIO ---
+    // 4. VALIDACIÓN ROBUSTA DEL USUARIO (Previene el 401 del lado de Supabase)
     const authHeaderRaw = req.headers.get('Authorization');
-    if (!authHeaderRaw) throw new Error("No se envió el token de usuario");
+    if (!authHeaderRaw) throw new Error("No se proporcionó token de autorización");
     
-    const userToken = authHeaderRaw.replace('Bearer ', '').trim();
-    const { data: { user }, error: userError } = await supabase.auth.getUser(userToken);
+    // Limpieza mejorada: extrae el token sin importar si 'Bearer' viene con mayúsculas o espacios extra
+    const userToken = authHeaderRaw.split(" ").pop();
+    
+    if (!userToken) throw new Error("Formato de token inválido");
 
-    if (userError || !user) throw new Error("Sesión de usuario inválida en Supabase");
+    const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(userToken);
 
-    const { error: dbError } = await supabase
+    if (userError || !user) {
+      console.error("Error validando usuario:", userError);
+      throw new Error("Sesión de usuario inválida en Supabase");
+    }
+
+    // 5. Guardar o actualizar los tokens en la tabla 'qbo_tokens'
+    const { error: dbError } = await supabaseAdmin
       .from('qbo_tokens')
       .upsert({
         user_id: user.id,
@@ -76,16 +88,20 @@ serve(async (req) => {
 
     if (dbError) throw dbError;
 
-    return new Response(JSON.stringify({ message: "Conectado con éxito" }), {
+    return new Response(JSON.stringify({ 
+      message: "Conectado con éxito",
+      realmId: realmId 
+    }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 200,
     });
 
-  } catch (error) {
-    console.error("Error detectado:", error.message);
+  } catch (error: any) {
+    console.error("Error detectado en la función:", error.message);
+    
     return new Response(JSON.stringify({ error: error.message }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      status: 401, // Cambiamos a 401 para que el frontend sepa que es auth
+      status: 400, // Usamos 400 para errores de lógica/intercambio
     });
   }
 })
