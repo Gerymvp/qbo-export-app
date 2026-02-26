@@ -33,7 +33,7 @@ const Facturacion = () => {
   // Handlers locales para la interfaz
   const handleConnectQBO = () => {
     const clientId = 'ABHJF9iKHUtsgJwew9TtBQmoFjal8zRArUbW4DRFUXlTFLu5PQ';
-    const redirectUri = encodeURIComponent('https://qbo-export-8qb76ee59-gerydevs-projects.vercel.app/'); 
+    const redirectUri = encodeURIComponent('https://qbo-export-app.vercel.app/'); 
     window.location.href = `https://appcenter.intuit.com/connect/oauth2?client_id=${clientId}&response_type=code&scope=com.intuit.quickbooks.accounting&redirect_uri=${redirectUri}&state=pma_${Math.random().toString(36).substring(7)}`;
   };
 
