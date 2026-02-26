@@ -41,17 +41,17 @@ const Facturacion = () => {
       exchangeStarted.current = true;
 
       // Limpiar la URL inmediatamente para evitar re-ejecuciones al recargar
-      window.history.replaceState({}, document.title, window.location.origin);
+      window.history.replaceState({}, document.title, window.location.origin + window.location.pathname);
 
       const handleTokenExchange = async () => {
         try {
           console.log("Iniciando intercambio de tokens único...");
           
           // 1. Obtener la sesión actual para el header de autorización
-          const { data: { session } } = await supabase.auth.getSession();
+          const { data: { session }, error: sessionError } = await supabase.auth.getSession();
           
-          if (!session) {
-            throw new Error("No se encontró una sesión de usuario activa.");
+          if (sessionError || !session) {
+            throw new Error("No se encontró una sesión de usuario activa. Por favor, inicia sesión.");
           }
 
           // 2. Invocar la función pasando el JWT en los headers
@@ -68,13 +68,13 @@ const Facturacion = () => {
           localStorage.setItem('qbo_connected', 'true');
           localStorage.setItem('qbo_realmId', rId);
           
-          console.log("Intercambio exitoso:", data.message);
+          console.log("Intercambio exitoso:", data?.message);
           
-          // Recargar para que useFacturacion inicialice los estados con los nuevos datos
+          // Recargar para que useFacturacion detecte los cambios
           window.location.reload(); 
         } catch (err) {
           console.error("Error en intercambio OAuth:", err);
-          alert(`Error de conexión: ${err.message || "El código de QuickBooks expiró."}`);
+          alert(`Error de conexión: ${err.message || "El código de QuickBooks ya expiró."}`);
           exchangeStarted.current = false; // Permitir reintento si falla
         }
       };
@@ -87,7 +87,7 @@ const Facturacion = () => {
     // Client ID de Producción
     const clientId = 'ABHJF9iKHUtsgJwew9TtBQmoFjal8zRArUbW4DRFUXlTFLu5PQ';
     
-    // El redirectUri debe coincidir exactamente con el configurado en Intuit Developer Portal
+    // IMPORTANTE: Debe coincidir EXACTAMENTE con el Dashboard de Intuit
     const redirectUri = encodeURIComponent('https://qbo-export-app.vercel.app'); 
     const state = `pma_${Math.random().toString(36).substring(7)}`;
 
@@ -100,13 +100,17 @@ const Facturacion = () => {
     const reader = new FileReader();
     reader.onload = (event) => processNewInvoice(event.target.result);
     reader.readAsText(file);
-    e.target.value = null;
+    e.target.value = null; // Reset para permitir subir el mismo archivo
   };
 
   return (
     <div className="facturacion-container">
       {/* Botón flotante para la bandeja de entrada */}
-      <button className="floating-inbox-btn" onClick={() => setIsDrawerOpen(true)}>
+      <button 
+        className="floating-inbox-btn" 
+        onClick={() => setIsDrawerOpen(true)}
+        title="Bandeja de facturas pendientes"
+      >
         <Mail size={24} />
         {pendientes.length > 0 && <span className="notif-dot">{pendientes.length}</span>}
       </button>
@@ -155,7 +159,7 @@ const Facturacion = () => {
         onRefresh={fetchPendientes} 
       />
 
-      <main>
+      <main className="facturacion-content">
         {invoiceData ? (
           <ReviewTable 
             data={invoiceData} 
