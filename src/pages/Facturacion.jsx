@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react'; //
 import { Mail } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useFacturacion } from '../hooks/useFacturacion';
@@ -26,25 +26,56 @@ const Facturacion = () => {
     handleUpdateItem,
     qboAccounts,
     qboVendors,
-    // --- EXTRACCIÓN DE LA FUNCIÓN DESDE EL HOOK ---
     enviarAQuickBooks 
   } = useFacturacion();
 
-  // Handlers locales para la interfaz
-const handleConnectQBO = () => {
-  const clientId = 'ABHJF9iKHUtsgJwew9TtBQmoFjal8zRArUbW4DRFUXlTFLu5PQ';
-  
-  // Detecta si estás en la URL corta o en la larga de Vercel dinámicamente
-  // Agregamos la '/' al final para que coincida exactamente con lo que tienes en Intuit
-  const currentOrigin = window.location.origin.endsWith('/') 
-    ? window.location.origin 
-    : `${window.location.origin}/`;
+  // REFERENCIA PARA EVITAR DOBLE EJECUCIÓN (React Strict Mode)
+  const exchangeStarted = useRef(false);
 
-  const redirectUri = encodeURIComponent(currentOrigin); 
-  const state = `pma_${Math.random().toString(36).substring(7)}`;
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get('code');
+    const rId = params.get('realmId');
 
-  window.location.href = `https://appcenter.intuit.com/connect/oauth2?client_id=${clientId}&response_type=code&scope=com.intuit.quickbooks.accounting&redirect_uri=${redirectUri}&state=${state}`;
-};
+    if (code && rId && !exchangeStarted.current) {
+      exchangeStarted.current = true;
+
+      // Limpiar la URL inmediatamente para evitar re-procesamientos al refrescar
+      window.history.replaceState({}, document.title, window.location.origin);
+
+      const handleTokenExchange = async () => {
+        try {
+          console.log("Iniciando intercambio de tokens único...");
+          const { data, error } = await supabase.functions.invoke('qbo-oauth-handler', {
+            body: { code, realmId: rId }
+          });
+
+          if (error) throw error;
+
+          // Guardar éxito y recargar para refrescar el estado de conexión
+          localStorage.setItem('qbo_connected', 'true');
+          localStorage.setItem('qbo_realmId', rId);
+          window.location.reload(); 
+        } catch (err) {
+          console.error("Error en intercambio OAuth:", err);
+          alert("Error de conexión: El código de QuickBooks ya expiró o es inválido. Intenta conectar de nuevo.");
+        }
+      };
+
+      handleTokenExchange();
+    }
+  }, []);
+
+  const handleConnectQBO = () => {
+    const clientId = 'ABHJF9iKHUtsgJwew9TtBQmoFjal8zRArUbW4DRFUXlTFLu5PQ';
+    
+    // Debe coincidir EXACTAMENTE con el Redirect URI en Intuit (sin barra final si así se configuró)
+    const redirectUri = encodeURIComponent(window.location.origin); 
+    
+    const state = `pma_${Math.random().toString(36).substring(7)}`;
+
+    window.location.href = `https://appcenter.intuit.com/connect/oauth2?client_id=${clientId}&response_type=code&scope=com.intuit.quickbooks.accounting&redirect_uri=${redirectUri}&state=${state}`;
+  };
 
   const handleFileUpload = (e) => {
     const file = e.target.files[0];
@@ -62,9 +93,6 @@ const handleConnectQBO = () => {
         {pendientes.length > 0 && <span className="notif-dot">{pendientes.length}</span>}
       </button>
 
-      {/* CORRECCIÓN: Aseguramos que onDeleteAll se pase como prop 
-          para que coincida con la desestructuración en InboxDrawer.jsx 
-      */}
       <InboxDrawer 
         isOpen={isDrawerOpen} 
         onClose={() => setIsDrawerOpen(false)}
@@ -77,15 +105,13 @@ const handleConnectQBO = () => {
         onDeleteAll={async () => {
             if (window.confirm('¿Estás seguro de que deseas eliminar TODAS las facturas de la bandeja?')) {
               try {
-                // Opción A: Eliminar usando un filtro que siempre sea verdadero para todos los registros
                 const { error } = await supabase
                   .from('facturas_pendientes')
                   .delete()
-                  .not('id', 'is', null); // Esto selecciona todos los registros que tengan un ID
+                  .not('id', 'is', null);
 
                 if (error) throw error;
                 
-                // Refrescar la lista local inmediatamente
                 await fetchPendientes();
                 alert('Bandeja vaciada con éxito');
               } catch (error) {
