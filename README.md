@@ -1,5 +1,7 @@
 # 📦 Sistema de Gestión de Inventario para QuickBooks Online
 
+![Demostración de Playwright E2E](assets/demo-playwright.gif)
+
 Plataforma web full-stack desarrollada en **React (Vite)** y **Supabase** diseñada para optimizar el control de inventarios, automatizar reglas de costos con proveedores y facilitar la exportación de catálogos compatibles con QuickBooks Online (QBO).
 
 ---
