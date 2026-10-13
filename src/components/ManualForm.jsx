@@ -60,7 +60,7 @@ const ManualForm = ({ onAdd, politicas }) => {
 
         <div className="input-field">
           <label>Nombre del Producto</label>
-          <input value={form.nombre} onChange={e => setForm({...form, nombre: e.target.value})} placeholder="Ej: Biblia..." required />
+          <input value={form.nombre} onChange={e => setForm({...form, nombre: e.target.value})} placeholder="Ej: Taza..." required />
         </div>
 
         <div className="input-field">
